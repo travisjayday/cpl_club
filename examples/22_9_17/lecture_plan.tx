@@ -17,12 +17,17 @@ Lecuture 9/22/17
 			- Huge range -3.4e38 to 3.4e38
 
 	- Basic Variable arithmetic 	
+		- Show Binary Operators
 		- Show the "integers.c" example
+		- Show the "floats.c" example
 		- Describe how to define integers
 		- Show real world example: celcius to fahrenheit
 
 	- Assignment: 
 		- Write a program that calculates the area of a circle, given a radius (A = pi * r * r) 
+
+	- Write Program that converts fharenheit to celcius
+		- T(F) = (F - 32) * (5/9)
 
 	- Characters and Strings
 		- Show characters.c example and ascii

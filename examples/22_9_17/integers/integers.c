@@ -1,10 +1,14 @@
 #include <stdio.h>
 
+// entry point of program 
 int main()
 {
-	// objective: solve for y in the linear equation y = 4x + 3 if x = 5
+	/**********************************************************/
+	/* objective:                                             */
+	/* solve for y in the linear equation y = 4x + 3 if x = 5 */
+	/**********************************************************/
 
-	// declare variables
+	// declare and initialize variables
 	int y = 0;	 		// declare whole number variables x and y, and initialize
 	int x = 0; 			// them to 0
 
@@ -15,10 +19,10 @@ int main()
 					// y is now equal to 23
 
 	// print and format the result
-	// %d is a placeholder for an integer variable which is specified
+	// %d is a placeholder for an integer (discrete) variable which is specified
 	// after the string's finishing quote. 
 	
-	printf("In the equation `y = 4x + 3`, for x = 5, y = %d\n", y);
+	printf("In the equation `y = 4x + 3`, for x = 5, y = %d\n\n\n", y);
 
 	// terminate the program gracefully
 	return 0;

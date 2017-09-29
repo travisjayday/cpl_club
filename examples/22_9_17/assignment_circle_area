@@ -1,0 +1,10 @@
+1. Declare real number variables called radius, area and pi.
+
+2. Assign pi the value 3.14159
+
+3. Assign radius the value 5
+
+4. Assign area to the area of the circle (pi * r^2) or (pi * r * r) 
+
+5. Print to screen: "The area of a circle with a radius of <radius> is <area>", where <radius> and <area> are the values of your variables
+

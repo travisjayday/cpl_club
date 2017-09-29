@@ -1,3 +1,8 @@
+Assignment: Calculating the radius of a circle
+
+Instructions: I've provided you with Algorithm.
+Follow the next 5 steps to create a C progrm that calculates the area of a circle.
+
 1. Declare real number variables called radius, area and pi.
 
 2. Assign pi the value 3.14159

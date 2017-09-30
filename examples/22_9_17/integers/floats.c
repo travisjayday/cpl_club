@@ -9,7 +9,7 @@ int main()
 	/****************************************************************/
 
 	// declare and initialize variables
-	float y = 0.0;	 		// declare whole number variables x and y, and initialize
+	float y = .0;	 		// declare whole number variables x and y, and initialize
 	float x = 0.0; 			// them to 0
 
 	x = 5.0;			// assign x the value of 5

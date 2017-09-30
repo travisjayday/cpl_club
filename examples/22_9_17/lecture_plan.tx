@@ -26,8 +26,14 @@ Lecuture 9/22/17
 	- Assignment: 
 		- Write a program that calculates the area of a circle, given a radius (A = pi * r * r) 
 
+---------------------------------------------------------------------------------------------------------------
+
+	- Homework: Implement the quadratic formula.
+
 	- Write Program that converts fharenheit to celcius
 		- T(F) = (F - 32) * (5/9)
+
+-----------------------------------------------------------------------------------------------------------------
 
 	- Characters and Strings
 		- Show characters.c example and ascii

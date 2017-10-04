@@ -1,0 +1,19 @@
+Implementing the Quadratic Formula
+-----------------------------------------------------------------
+First, familiarize yourself with the formula. Then..
+
+Our first algorithm should be implemented like so: 
+- Declare real number variables a, b, c, disc, x1, and x2
+
+- Initialize the input variables a,b,c to some number (test: 8 2 2)
+
+- Assign the variable disc to the discriminint of a, b, c.
+	(the discriminint is B^2 - 4AC) 
+
+- Assign x1 to the first solution of the quadratic equation
+	(i.e. negative b PLUS squareroot of discriminiant over 2a) 
+
+- Assign x2 to the second solution of the quadratic equation
+	(i.e. negative b MINUS squareroot of discriminant over 2a)
+
+- Print to screen "Solution1: [value of x1], Solution2: [value of x2]"  

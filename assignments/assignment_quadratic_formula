@@ -17,3 +17,8 @@ Our first algorithm should be implemented like so:
 	(i.e. negative b MINUS squareroot of discriminant over 2a)
 
 - Print to screen "Solution1: [value of x1], Solution2: [value of x2]"  
+---------------------------------------------------------------------
+
+PART II
+-------------------------------------------------------------------
+Modify the program so that it prints an error message and returns a -1 if the discriminant is less than zero.

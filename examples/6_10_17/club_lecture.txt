@@ -1,0 +1,20 @@
+- Explain what if statements are
+	- Boolean algebra: True or False
+	- In C, False is equal to zero, anything else is true
+	- Relational operators in C: 
+		== 
+		!= 
+		>
+		< 
+		>=
+		<=
+	- Logical operators:
+		&&
+		||
+		!
+	- Block of statements? 
+		{...}
+	- If runs block of statements only if the condition is true
+
+- Modify the quadratif function program so that it uses if statements to check if the discriminant is zero. 
+- 

@@ -7,7 +7,7 @@ This program will calculate basic integer exponents like 2^10 for example.
 2) Assign 1 to result
 3) Assign some test values for base and exponent (ex: 2 5)
 5) Write a loop that runs if and only if exponent is greater than zero
-6) In the body of the loop, assign the product of result times base to result
+6) In the body of the loop, assign the product of result and base, to result
 7) In the body of the loop, subtract 1 from exponent
 8) Once the loop completes, print "solution is [value of solution]"
 

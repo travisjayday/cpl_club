@@ -1,0 +1,31 @@
+Assignment List Temperatures 
+---------------------------------------------------------------------------
+Situation: 
+- You and your best friend John do not have an Internet connection. 
+- John wants to make a conversion list of temperatures from 0-40 degress celcius to the corresponding temperatures in fahrenheit. 
+
+- He knows the formula, F(C) = (9/5) * C + 32, where F(C) gives the temperature in fahrenheit, given C degrees celcius.  
+---------------------------------------------------------------------------
+Your Mission: 
+- Write a program that lists the temperatures 0-40 degrees centigrade and the corresponding temperatures in degress fahrenheit.
+
+---------------------------------------------------------------------------
+Sample Output of the program (note: temperatures in this example output may not be accurate):
+
+---------------------------------------------
+root@debian:~# ./a.out
+Celcius | Fahrenheit
+1	  33.3
+2	  34.5
+3	  35.6
+4	  36.0
+...	  ...
+39	  124.5
+40 	  125.6
+----------------------------------------------
+
+Hints to get started:
+- Recall the celcius to fahrenheit conversion formula
+- This program calls for repetitive action; immediately think: LOOPS
+
+

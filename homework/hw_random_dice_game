@@ -1,0 +1,21 @@
+-Write a program that rolls a 6 sided die and outputs the rolled number to the screen. If the number is 4,5,6 then print “you’ve won the game” if the number is 1,2,3 print “you are a loser.” So for example:
+
+—————————-
+(Case 1)
+./a.out
+You rolled a 5.
+You’ve won the game.
+
+(Case 2)
+./a.out
+You rolled a 3.
+You are a loser.
+——————————
+
+Remember: a die has 6 sides and you can roll the numbers 1,2,3,4,5,6.
+
+Brainstorm on how to write the program before implementing it (remember planning,implementation,compilation,testing)
+
+Tip: you will have to use the random function and the modulus operator and if statements.
+
+Good luck.

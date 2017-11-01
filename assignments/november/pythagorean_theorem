@@ -1,0 +1,15 @@
+Assignment: Theorem of Pythagoras
+-----------------------------------------
+
+Write a program that prompts the user to input TWO numbers with a range from zero to nine ('a' and 'b')
+Let the user input two numbers (from 0-9) 
+Calculate the third side 'c', given that the triangle is a right triangle.
+So for c^2 = a^2 + b^2, calculate the 'c' term. 
+Then output the result to screen
+
+Hints: 
+- You must call the getchar() function to get the input for a and b
+- You must use the math.h library to use the square root function 
+- You must link the math library when executing gcc 
+- a and b must be characters while c must necessarily be a different variables type...
+

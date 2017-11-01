@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-int min(int i, int j);
+int min(int i, int j)
 {
 	if (i < j) 
 	{

@@ -1,0 +1,5 @@
+Write a program in which you 
+
+define a function that takes two sidelengths, a and b, and returns c, the third sidelength of the right triagle
+
+a^2 + b^2 = c^2

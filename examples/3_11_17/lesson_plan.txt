@@ -1,0 +1,21 @@
+Lecture: 
+- Explain the difference of chars and integers in terms of ram 
+	- Ram is divided into cells
+	- Integers take 4 bytes of space 	–2,147,483,648 to 2,147,483,647
+	- Chars take 1 byte of space		-128 to 127
+	- long long 8 bytes			–9,223,372,036,854,775,808 to 9,223,372,036,854,775,807
+
+
+- First show the example of addresses. 
+- Show the address print and variable size program  
+- Then show the Scanf integer input variable progarm 
+
+-Assignment 1: 
+- Expand the pythagorean theorem program so that it asks the user to input two numbers for sides a and b (with a range from 0 to 9). 
+- Tips: 
+	- Use a char variable for getting input with the getchar() function
+	- Then just call your pythagoream_thm() function that you made last time with the inputted values
+	- You must test to see if you're getting the correct output
+
+- Then show the example of the for loop.
+ Write a program that

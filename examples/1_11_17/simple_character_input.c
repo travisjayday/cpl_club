@@ -2,7 +2,7 @@
 
 int main()
 {
-	int c;
+	char c;
 	printf("Write a character, then press enter: \n"); 
 	c = getchar(); 
 	printf("You wrote %c\n", c); 

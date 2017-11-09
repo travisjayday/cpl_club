@@ -1,18 +1,18 @@
-(1) Travis: ¿Cuándo es el desayuno? porque tengo mucha hambre.
-(2) Travis: Yo quiero comer tu comida rica, mi corazón.
-(3) Travis: Comeremos mi comida favorita en todo el mundo: frijoles con arroz.
-(4) Travis: Yo no puedo comer lo suficiente de eso.
-(5) Travis: Antes de desayunar, tengo que preparar mi cuerpo.
-(6) Travis: Yo necesito ir al baño; ¿puedo ir al baño, mi corazón? Gracias.
-(7) Travis: Yo he regresado y estoy listo para comer los frijoles.
-(8) Travis: ¿Con quién estás hablando por el teléfono, mi amor?
-(9) Travis: Ella me estaba enseñando cómo hacer frijoles deliciosos.
-(10) Travis: ¡Tú nunca podrás hacer los frijoles como ella!
-(11) Travis: Gracias hijo, eres el único que me comprendes.
-(12) Travis: Mi esposa no puede comprender que, a veces, no me gusta su comida…
-(13) Travis: Pero, te amo Shaena; no quiero un divorcio.
-(14) Travis: Recuerda que hoy es nuestro aniversario, mi amor...
-(15) Travis: Naturalmente, yo ganaré toda la casa y todos los muebles.
-(16) Travis: Es lógico, porque yo compré todo con mi propio dinero.
-(17) Travis: No, Nick, tú necesitas vivir con tu abuelo Juan.
-(18) Travis: Y yo viviré con María Alejandrina Cervantes en Nueva York.
+Travis (1): Hola mija, feliz cumpleanos, espero que tengas un día espectacular. 
+Travis (2): ¿Te parece si vamos a comer a tu restaurante favorito?
+Travis (3): Espera, con quién estás hablando por el teléfono?
+Travis (4): Si es tu mama, dile que tenemos cosas que hacer.
+Travis (5): Natalie, tenemos que ir al carro porque tengo mucha hambre.
+Travis (6): Dile a Carla que tenemos que salir ahorita. 
+Travis (7): Bueno, ya vámonos y yo conduciré al carro. 
+Travis (8): Finalmente llegamos al restaurante; estoy muerto de hambre.
+Travis (9): ¿Dónde está Natalie y a dónde se fue?
+Travis (10): Me estoy empezando a preocupar porque no la veo.
+Travis (11): Estoy contento que escogiste ir conmigo y no con tu mamá. 
+Travis (12): Tú has hecho la decisión correcta y estoy agradecido.
+Travis (13): ¡Oh no, qué es esta escena tan horrible!
+Travis (14): ¿Cómo me pudiste engañar y venir con tu mamá?
+Travis (15): ¡No, tú no sabes nada sobre la vida!
+Travis (16): No le digas a mí hija qué hacer.
+Travis (17): Me da igual, si quieres tu te quedas con ella. 
+Travis (18): Saldré ahora mismo y nunca volveré a esta familia horrible. 

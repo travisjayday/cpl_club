@@ -45,8 +45,10 @@ Paste the minidrama below, then type the %c symbol, then [enter]. \n\
 		  	if (inbuffer[j + s] == ')') 
 				break;	
 		}
+		s++; 
 
-		if (memcmp(inbuffer + j + s + 2, input, input_len) == 0) 	// if start of line + index of ) is equal to input
+
+		if (memcmp(inbuffer + j, input, input_len) == 0) 	// if start of line + index of ) is equal to input
 		{
 			memcpy(outbuffer + o, inbuffer + j, line_len+1); 	// copy the line + newline to outbuffer
 			o += line_len +1; 					// update output index (accomodate for new chars)

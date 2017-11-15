@@ -1,0 +1,13 @@
+Write a program that asks the user for a password. 
+Then compare the inputted password with a predefined password string. 
+To compare the arrays, use a for loop (to compare character by character)
+
+1. declare and initialize the true password
+2. declare an input password
+3. ask the user for user input for the input password
+4. compare the passwords with a for loop, character by character. 
+	- make a for loop that loops from 0 to STRING_LENGTH and compares each
+		element of true password with input password. 
+	- IF characters DO NOT match, print "Access denied scrubby"
+	- IF characters DO match, print "Hey boii. Welcome to the matrix"
+

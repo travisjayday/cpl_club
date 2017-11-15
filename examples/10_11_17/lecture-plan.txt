@@ -1,0 +1,19 @@
+# Do decimal to hex input output example
+- Remind kiddos of scanf and printf with hex formatters
+- What if input is a character? 
+- talk about return value of scanf
+
+# Show passing arrays to function. Write a function that prints the contents of the array, given that the function header is 
+
+	void print_array(int arr[], int len); 
+
+# Assignment: Write a program in which you define a function max_elem which takes an integer array and outputs the element with the greatest value
+
+-----------------------------------------------------------------------
+
+# Assigment: Write a function str_equal which compares each character of two strings for a given number of characters. The parameters to the function should be str1, str2, and strlen. 
+
+# Show simpel string input to prepare for next sasignment
+
+# Assignment pt. 2: 
+Augment the previous program such that it asks for a password string. Compare the given input string from user with the password string using your str_equal function. 

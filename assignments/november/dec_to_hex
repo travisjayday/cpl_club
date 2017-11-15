@@ -1,0 +1,24 @@
+#Assignment: decimal to hexadecimal converter
+
+1) Write a program such that it prompts the user to input a decimal 
+integer and subsequently outputs the corresponding integer in its 
+hexadecimal representation. 
+
+------------------------------------------------
+root@debian:~#./a.out
+Input a decimal number to convert: 23
+Your decimal input, 23, is 0x17 in hex
+-------------------------------------------------
+
+2) What happens if the user inputs a character instead of a number? 
+Modify the program such that it catches if invalid user input was 
+given.
+
+Hint: the scanf() function returns the number of values read. 
+	test if scanf() returns zero to check if input was invalid
+
+-------------------------------------------------
+root@debian:~#./a.out
+Input a decimal number to convert: lalalala
+uh oh, please input an integer
+-------------------------------------------------

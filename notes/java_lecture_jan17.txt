@@ -1,0 +1,14 @@
+1. Introduce cplclub.tk
+2. Go to online Java compiler (codiva.com)
+3. Show hello-world problem, explain the hello-world program
+4. Show variable types: 
+	- int, double, float, String, boolean
+5. Show while loop: 
+	- print "I know the way" forever
+	- print numbers 1 to 100
+6. Introduce Chinese Remainder Theroem Problem
+	- Find a number, n, for which
+		- dividing n by 3, yields a remainder of 1
+		- dividing n by 5, yields a remainder of 2
+		- dividing n by 7, yields a remainder of 3
+7. Go to codingbat.com and do Warmup-1 -> monkeyTrouble

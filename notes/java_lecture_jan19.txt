@@ -1,0 +1,8 @@
+1. Go over chinese remainder theorem problem again
+2. Do codingbat.com warmup-1 Parrot Trouble
+3. Talk about functions again (use parrot-trouble again)
+4. Quickly go over casting again
+5. Create a function that rounds a double to an integer
+6. Do arrays and for loops. 		
+7. Do classes
+	- class human, functions: sayName, sayAge, 

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -48,9 +48,11 @@ namespace OPL2 {
 				chan->AddSamples_m16( todo, buf );
 			}
 		}
+
 		virtual void Init( Bitu rate ) {
 			adlib_init(rate);
 		}
+
 		~Handler() {
 		}
 	};
@@ -77,9 +79,11 @@ namespace OPL3 {
 				chan->AddSamples_s16( todo, buf );
 			}
 		}
+
 		virtual void Init( Bitu rate ) {
 			adlib_init(rate);
 		}
+
 		~Handler() {
 		}
 	};
@@ -606,7 +610,7 @@ static void SaveRad() {
 };
 
 
-static void OPL_SaveRawEvent(bool pressed) {
+void OPL_SaveRawEvent(bool pressed) {
 	if (!pressed)
 		return;
 //	SaveRad();return;
@@ -717,3 +721,4 @@ void OPL_ShutDown(Section* sec){
 	module = 0;
 
 }
+

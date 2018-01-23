@@ -28,6 +28,8 @@ extern bool	enableSound;
 extern bool	enableCycleHack;
 extern bool	enableRefreshHack;
 extern bool enableMixerHack;
+extern bool enableGlide;
+
 
 struct loader_config
 {
@@ -41,6 +43,7 @@ struct loader_config
 	unsigned long cycleHack;
 	unsigned long refreshHack;
 	unsigned long mixerHack;
+	unsigned long glideEnable;
 	long width;
 	long height;
 	long scale_width;

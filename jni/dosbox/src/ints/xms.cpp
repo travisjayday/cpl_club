@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -123,10 +123,10 @@ static INLINE bool InvalidHandle(Bitu handle) {
 	return (!handle || (handle>=XMS_HANDLES) || xms_handles[handle].free);
 }
 
-Bitu XMS_QueryFreeMemory(Bit16u& largestFree, Bit16u& totalFree) {
+Bitu XMS_QueryFreeMemory(Bit32u& largestFree, Bit32u& totalFree) {
 	/* Scan the tree for free memory and find largest free block */
-	totalFree=(Bit16u)(MEM_FreeTotal()*4);
-	largestFree=(Bit16u)(MEM_FreeLargest()*4);
+	totalFree=(Bit32u)(MEM_FreeTotal()*4);
+	largestFree=(Bit32u)(MEM_FreeLargest()*4);
 	if (!totalFree) return XMS_OUT_OF_SPACE;
 	return 0;
 }
@@ -224,7 +224,7 @@ Bitu XMS_UnlockMemory(Bitu handle) {
 	return XMS_BLOCK_NOT_LOCKED;
 }
 
-Bitu XMS_GetHandleInformation(Bitu handle, Bit8u& lockCount, Bit8u& numFree, Bit16u& size) {
+Bitu XMS_GetHandleInformation(Bitu handle, Bit8u& lockCount, Bit8u& numFree, Bit32u& size) {
 	if (InvalidHandle(handle)) return XMS_INVALID_HANDLE;
 	lockCount = xms_handles[handle].locked;
 	/* Find available blocks */
@@ -232,7 +232,7 @@ Bitu XMS_GetHandleInformation(Bitu handle, Bit8u& lockCount, Bit8u& numFree, Bit
 	for (Bitu i=1;i<XMS_HANDLES;i++) {
 		if (xms_handles[i].free) numFree++;
 	}
-	size=(Bit16u)(xms_handles[handle].size);
+	size=(Bit32u)(xms_handles[handle].size);
 	return 0;
 }
 
@@ -296,11 +296,18 @@ Bitu XMS_Handler(void) {
 		reg_bl = 0;
 		break;
 	case XMS_QUERY_FREE_EXTENDED_MEMORY:						/* 08 */
-		reg_bl = XMS_QueryFreeMemory(reg_ax,reg_dx);
+		reg_bl = XMS_QueryFreeMemory(reg_eax,reg_edx);
+		if (reg_eax > 65535) reg_eax = 65535; /* cap sizes for older DOS programs. newer ones use function 0x88 */
+		if (reg_edx > 65535) reg_edx = 65535;
 		break;
 	case XMS_ALLOCATE_ANY_MEMORY:								/* 89 */
-		reg_edx &= 0xffff;
-		// fall through
+		{ /* Chopping off bits 16-31 to fall through to ALLOCATE_EXTENDED_MEMORY is inaccurate.
+		     The Extended Memory Specification states you use all of EDX, so programs can request
+		     64MB or more. Even if DOSBox does not (yet) support >= 64MB of RAM. */
+		Bit16u handle = 0;
+		SET_RESULT(XMS_AllocateMemory(reg_edx,handle));
+		reg_dx = handle;
+		}; break;
 	case XMS_ALLOCATE_EXTENDED_MEMORY:							/* 09 */
 		{
 		Bit16u handle = 0;
@@ -327,11 +334,12 @@ Bitu XMS_Handler(void) {
 		SET_RESULT(XMS_UnlockMemory(reg_dx));
 		break;
 	case XMS_GET_EMB_HANDLE_INFORMATION:  						/* 0e */
-		SET_RESULT(XMS_GetHandleInformation(reg_dx,reg_bh,reg_bl,reg_dx),false);
+		SET_RESULT(XMS_GetHandleInformation(reg_dx,reg_bh,reg_bl,reg_edx),false);
+		reg_edx &= 0xFFFF;
 		break;
 	case XMS_RESIZE_ANY_EXTENDED_MEMORY_BLOCK:					/* 0x8f */
-		if(reg_ebx > reg_bx) LOG_MSG("64MB memory limit!");
-		//fall through
+		SET_RESULT(XMS_ResizeMemory(reg_dx, reg_ebx));
+		break;
 	case XMS_RESIZE_EXTENDED_MEMORY_BLOCK:						/* 0f */
 		SET_RESULT(XMS_ResizeMemory(reg_dx, reg_bx));
 		break;
@@ -388,19 +396,14 @@ Bitu XMS_Handler(void) {
 		reg_bl=UMB_NO_BLOCKS_AVAILABLE;
 		break;
 	case XMS_QUERY_ANY_FREE_MEMORY:								/* 88 */
-		reg_bl = XMS_QueryFreeMemory(reg_ax,reg_dx);
-		reg_eax &= 0xffff;
-		reg_edx &= 0xffff;
+		reg_bl = XMS_QueryFreeMemory(reg_eax,reg_edx);
 		reg_ecx = (MEM_TotalPages()*MEM_PAGESIZE)-1;			// highest known physical memory address
 		break;
 	case XMS_GET_EMB_HANDLE_INFORMATION_EXT: {					/* 8e */
 		Bit8u free_handles;
-		Bitu result = XMS_GetHandleInformation(reg_dx,reg_bh,free_handles,reg_dx);
+		Bitu result = XMS_GetHandleInformation(reg_dx,reg_bh,free_handles,reg_edx);
 		if (result != 0) reg_bl = result;
-		else {
-			reg_edx &= 0xffff;
-			reg_cx = free_handles;
-		}
+		else reg_cx = free_handles;
 		reg_ax = (result==0);
 		} break;
 	default:
@@ -483,3 +486,4 @@ void XMS_Init(Section* sec) {
 	test = new XMS(sec);
 	sec->AddDestroyFunction(&XMS_ShutDown,true);
 }
+

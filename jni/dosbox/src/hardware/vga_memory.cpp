@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -937,7 +937,11 @@ void VGA_SetupMemory(Section* sec) {
 	vga_allocsize+=2048;
 	vga.mem.linear_orgptr = new Bit8u[vga_allocsize+16];
 	vga.mem.linear=(Bit8u*)(((Bitu)vga.mem.linear_orgptr + 16-1) & ~(16-1));
-	memset(vga.mem.linear,0,vga_allocsize);
+#if NEON_MEMORY
+		memset_neon(vga.mem.linear,0,vga_allocsize);
+#else
+		memset(vga.mem.linear,0,vga_allocsize);
+#endif
 
 	vga.fastmem_orgptr = new Bit8u[(vga.vmemsize<<1)+4096+16];
 	vga.fastmem=(Bit8u*)(((Bitu)vga.fastmem_orgptr + 16-1) & ~(16-1));
@@ -947,10 +951,18 @@ void VGA_SetupMemory(Section* sec) {
 	vga.vmemwrap = vga.vmemsize;
 
 #ifdef VGA_KEEP_CHANGES
-	memset( &vga.changes, 0, sizeof( vga.changes ));
+#if NEON_MEMORY
+		memset_neon( &vga.changes, 0, sizeof( vga.changes ));
+#else
+		memset( &vga.changes, 0, sizeof( vga.changes ));
+#endif
 	int changesMapSize = (vga.vmemsize >> VGA_CHANGE_SHIFT) + 32;
 	vga.changes.map = new Bit8u[changesMapSize];
-	memset(vga.changes.map, 0, changesMapSize);
+#if NEON_MEMORY
+		memset_neon(vga.changes.map, 0, changesMapSize);
+#else
+		memset(vga.changes.map, 0, changesMapSize);
+#endif
 #endif
 	vga.svga.bank_read = vga.svga.bank_write = 0;
 	vga.svga.bank_read_full = vga.svga.bank_write_full = 0;

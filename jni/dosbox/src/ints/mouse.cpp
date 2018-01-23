@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -32,6 +32,10 @@
 #include "int10.h"
 #include "bios.h"
 #include "dos_inc.h"
+
+#if HAVE_NEON
+#include "math_neon.h"
+#endif
 
 static Bitu call_int33,call_int74,int74_ret_callback,call_mouse_bd;
 static Bit16u ps2cbseg,ps2cbofs;
@@ -456,12 +460,21 @@ void Mouse_CursorMoved(float xrel,float yrel,float x,float y,bool emulate) {
 	float dx = xrel * mouse.pixelPerMickey_x;
 	float dy = yrel * mouse.pixelPerMickey_y;
 
-	if((fabs(xrel) > 1.0) || (mouse.senv_x < 1.0)) dx *= mouse.senv_x;
-	if((fabs(yrel) > 1.0) || (mouse.senv_y < 1.0)) dy *= mouse.senv_y;
-	if (useps2callback) dy *= 2;	
+#if HAVE_NEON
+	if((fabsf_neon(xrel) > 1.0) || (mouse.senv_x < 1.0)) dx *= mouse.senv_x;
+	if((fabsf_neon(yrel) > 1.0) || (mouse.senv_y < 1.0)) dy *= mouse.senv_y;
+#else
+	if((fabsf(xrel) > 1.0) || (mouse.senv_x < 1.0)) dx *= mouse.senv_x;
+	if((fabsf(yrel) > 1.0) || (mouse.senv_y < 1.0)) dy *= mouse.senv_y;
+#endif
+	if (useps2callback) dy *= 2;
 
-	mouse.mickey_x += dx;
-	mouse.mickey_y += dy;
+	mouse.mickey_x += (dx * mouse.mickeysPerPixel_x);
+	mouse.mickey_y += (dy * mouse.mickeysPerPixel_y);
+	if (mouse.mickey_x >= 32768.0) mouse.mickey_x -= 65536.0;
+	else if (mouse.mickey_x <= -32769.0) mouse.mickey_x += 65536.0;
+	if (mouse.mickey_y >= 32768.0) mouse.mickey_y -= 65536.0;
+	else if (mouse.mickey_y <= -32769.0) mouse.mickey_y += 65536.0;
 	if (emulate) {
 		mouse.x += dx;
 		mouse.y += dy;
@@ -490,6 +503,11 @@ void Mouse_CursorMoved(float xrel,float yrel,float x,float y,bool emulate) {
 		if (mouse.x < mouse.min_x) mouse.x = mouse.min_x;
 		if (mouse.y > mouse.max_y) mouse.y = mouse.max_y;
 		if (mouse.y < mouse.min_y) mouse.y = mouse.min_y;
+	} else {
+		if (mouse.x >= 32768.0) mouse.x -= 65536.0;
+		else if (mouse.x <= -32769.0) mouse.x += 65536.0;
+		if (mouse.y >= 32768.0) mouse.y -= 65536.0;
+		else if (mouse.y <= -32769.0) mouse.y += 65536.0;
 	}
 	Mouse_AddEvent(MOUSE_HAS_MOVED);
 	DrawCursor();
@@ -803,8 +821,8 @@ static Bitu INT33_Handler(void) {
 		mouse.textXorMask = reg_dx;
 		break;
 	case 0x0b:	/* Read Motion Data */
-		reg_cx=(Bit16s)(mouse.mickey_x*mouse.mickeysPerPixel_x);
-		reg_dx=(Bit16s)(mouse.mickey_y*mouse.mickeysPerPixel_y);
+		reg_cx=static_cast<Bit16s>(mouse.mickey_x);
+		reg_dx=static_cast<Bit16s>(mouse.mickey_y);
 		mouse.mickey_x=0;
 		mouse.mickey_y=0;
 		break;
@@ -926,6 +944,12 @@ static Bitu INT33_Handler(void) {
 		reg_cx=(Bit16u)mouse.max_x;
 		reg_dx=(Bit16u)mouse.max_y;
 		break;
+	case 0x2a:	/* Get cursor hot spot */
+		reg_al=(Bit8u)-mouse.hidden;	// Microsoft uses a negative byte counter for cursor visibility
+		reg_bx=(Bit16u)mouse.hotx;
+		reg_cx=(Bit16u)mouse.hoty;
+		reg_dx=0x04;	// PS/2 mouse type
+		break;
 	case 0x31: /* Get Current Minimum/Maximum virtual coordinates */
 		reg_ax=(Bit16u)mouse.min_x;
 		reg_bx=(Bit16u)mouse.min_y;
@@ -1007,8 +1031,8 @@ static Bitu INT74_Handler(void) {
 			reg_bx=mouse.event_queue[mouse.events].buttons;
 			reg_cx=POS_X;
 			reg_dx=POS_Y;
-			reg_si=(Bit16s)(mouse.mickey_x*mouse.mickeysPerPixel_x);
-			reg_di=(Bit16s)(mouse.mickey_y*mouse.mickeysPerPixel_y);
+			reg_si=static_cast<Bit16s>(mouse.mickey_x);
+			reg_di=static_cast<Bit16s>(mouse.mickey_y);
 			CPU_Push16(RealSeg(CALLBACK_RealPointer(int74_ret_callback)));
 			CPU_Push16(RealOff(CALLBACK_RealPointer(int74_ret_callback)));
 			SegSet16(cs, mouse.sub_seg);

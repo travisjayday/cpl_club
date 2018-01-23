@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -29,32 +29,8 @@ Bitu vga_read_p3d4(Bitu port,Bitu iolen);
 void vga_write_p3d5(Bitu port,Bitu val,Bitu iolen);
 Bitu vga_read_p3d5(Bitu port,Bitu iolen);
 
-extern	bool	enableRefreshHack;	//locnet, refresh hack, simply revert back to dosbox 0.65, also see vga_draw.cpp
-
 Bitu vga_read_p3da(Bitu port,Bitu iolen) {
 	Bit8u retval=0;
-	if (enableRefreshHack) {	//locnet, refresh hack
-		vga.internal.attrindex=false;
-		vga.tandy.pcjr_flipflop=false;
-
-		if (vga.config.retrace) {
-			switch (machine) {
-			case MCH_HERC:
-				 return 0x81;
-			default:
-				return 9;
-			}
-		}
-		else {
-			static Bit8u flip=0;
-
-			flip++;
-			if (flip>20) flip=0;
-			if (flip>10) return 1;
-			return 0;
-		}
-	}
-	else {
 	double timeInFrame = PIC_FullIndex()-vga.draw.delay.framestart;
 
 	vga.internal.attrindex=false;
@@ -75,7 +51,6 @@ Bitu vga_read_p3da(Bitu port,Bitu iolen) {
 			timeInLine <= vga.draw.delay.hblkend) {
 			retval |= 1;
 		}
-	}
 	}
 	return retval;
 }

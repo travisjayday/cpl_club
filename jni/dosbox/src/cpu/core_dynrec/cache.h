@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -84,7 +84,7 @@ static CacheBlockDynRec link_blocks[2];		// default linking (specially marked)
 // cache blocks and intercepts writes to the code for special treatment
 class CodePageHandlerDynRec : public PageHandler {
 public:
-	CodePageHandlerDynRec() {
+	CodePageHandlerDynRec() : PageHandler(0) {
 		invalidation_map=NULL;
 	}
 
@@ -103,8 +103,14 @@ public:
 		active_count=16;
 
 		// initialize the maps with zero (no cache blocks as well as code present)
-		memset(&hash_map,0,sizeof(hash_map));
-		memset(&write_map,0,sizeof(write_map));
+#if NEON_MEMORY
+			memset_neon(&hash_map,0,sizeof(hash_map));
+			memset_neon(&write_map,0,sizeof(write_map));
+#else
+			memset(&hash_map,0,sizeof(hash_map));
+			memset(&write_map,0,sizeof(write_map));
+#endif
+
 		if (invalidation_map!=NULL) {
 			free(invalidation_map);
 			invalidation_map=NULL;
@@ -152,7 +158,11 @@ public:
 			return;
 		} else if (!invalidation_map) {
 			invalidation_map=(Bit8u*)malloc(4096);
+#if NEON_MEMORY
+			memset_neon(invalidation_map,0,4096);
+#else
 			memset(invalidation_map,0,4096);
+#endif
 		}
 		invalidation_map[addr]++;
 		InvalidateRange(addr,addr);
@@ -169,7 +179,11 @@ public:
 			return;
 		} else if (!invalidation_map) {
 			invalidation_map=(Bit8u*)malloc(4096);
+#if NEON_MEMORY
+			memset_neon(invalidation_map,0,4096);
+#else
 			memset(invalidation_map,0,4096);
+#endif
 		}
 #if defined(WORDS_BIGENDIAN) || !defined(C_UNALIGNED_MEMORY)
 		host_writew(&invalidation_map[addr],
@@ -191,7 +205,11 @@ public:
 			return;
 		} else if (!invalidation_map) {
 			invalidation_map=(Bit8u*)malloc(4096);
+#if NEON_MEMORY
+			memset_neon(invalidation_map,0,4096);
+#else
 			memset(invalidation_map,0,4096);
+#endif
 		}
 #if defined(WORDS_BIGENDIAN) || !defined(C_UNALIGNED_MEMORY)
 		host_writed(&invalidation_map[addr],
@@ -238,7 +256,11 @@ public:
 		} else {
 			if (!invalidation_map) {
 				invalidation_map=(Bit8u*)malloc(4096);
-				memset(invalidation_map,0,4096);
+#if NEON_MEMORY
+			memset_neon(invalidation_map,0,4096);
+#else
+			memset(invalidation_map,0,4096);
+#endif
 			}
 #if defined(WORDS_BIGENDIAN) || !defined(C_UNALIGNED_MEMORY)
 			host_writew(&invalidation_map[addr],
@@ -574,7 +596,11 @@ static void cache_init(bool enable) {
 			// allocate the cache blocks memory
 			cache_blocks=(CacheBlockDynRec*)malloc(CACHE_BLOCKS*sizeof(CacheBlockDynRec));
 			if(!cache_blocks) E_Exit("Allocating cache_blocks has failed");
+#if NEON_MEMORY
+			memset_neon(cache_blocks,0,sizeof(CacheBlockDynRec)*CACHE_BLOCKS);
+#else
 			memset(cache_blocks,0,sizeof(CacheBlockDynRec)*CACHE_BLOCKS);
+#endif
 			cache.block.free=&cache_blocks[0];
 			// initialize the cache blocks
 			for (i=0;i<CACHE_BLOCKS-1;i++) {
@@ -596,7 +622,7 @@ static void cache_init(bool enable) {
 			if(!cache_code_start_ptr) E_Exit("Allocating dynamic cache failed");
 
 			// align the cache at a page boundary
-			cache_code=(Bit8u*)(((long)cache_code_start_ptr + PAGESIZE_TEMP-1) & ~(PAGESIZE_TEMP-1)); //MEM LEAK. store old pointer if you want to free it.
+			cache_code=(Bit8u*)(((Bitu)cache_code_start_ptr + PAGESIZE_TEMP-1) & ~(PAGESIZE_TEMP-1));//Bitu is same size as a pointer.
 
 			cache_code_link_blocks=cache_code;
 			cache_code=cache_code+PAGESIZE_TEMP;

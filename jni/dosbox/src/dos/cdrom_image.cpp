@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -130,7 +130,7 @@ int CDROM_Interface_Image::AudioFile::getLength()
 int CDROM_Interface_Image::refCount = 0;
 CDROM_Interface_Image* CDROM_Interface_Image::images[26];
 CDROM_Interface_Image::imagePlayer CDROM_Interface_Image::player = {
-	NULL, NULL, NULL, {0}, 0, 0, 0, false, false };
+	NULL, NULL, NULL, {0}, 0, 0, 0, false, false, false, {0} };
 
 	
 CDROM_Interface_Image::CDROM_Interface_Image(Bit8u subUnit)
@@ -257,6 +257,12 @@ bool CDROM_Interface_Image::StopAudio(void)
 	return true;
 }
 
+void CDROM_Interface_Image::ChannelControl(TCtrl ctrl)
+{
+	player.ctrlUsed = (ctrl.out[0]!=0 || ctrl.out[1]!=1 || ctrl.vol[0]<0xfe || ctrl.vol[1]<0xfe);
+	player.ctrlData = ctrl;
+}
+
 bool CDROM_Interface_Image::ReadSectors(PhysPt buffer, bool raw, unsigned long sector, unsigned long num)
 {
 	int sectorSize = raw ? RAW_SECTOR_SIZE : COOKED_SECTOR_SIZE;
@@ -271,6 +277,20 @@ bool CDROM_Interface_Image::ReadSectors(PhysPt buffer, bool raw, unsigned long s
 
 	MEM_BlockWrite(buffer, buf, buflen);
 	delete[] buf;
+
+	return success;
+}
+
+bool CDROM_Interface_Image::ReadSectorsHost(void *buffer, bool raw, unsigned long sector, unsigned long num)
+{
+	int sectorSize = raw ? RAW_SECTOR_SIZE : COOKED_SECTOR_SIZE;
+	Bitu buflen = num * sectorSize;
+	
+	bool success = true; //Gobliiins reads 0 sectors
+	for(unsigned long i = 0; i < num; i++) {
+		success = ReadSector((Bit8u*)buffer + (i * sectorSize), raw, sector + i);
+		if (!success) break;
+	}
 
 	return success;
 }
@@ -334,9 +354,25 @@ void CDROM_Interface_Image::CDAudioCallBack(Bitu len)
 		}
 	}
 	SDL_mutexV(player.mutex);
+	if (player.ctrlUsed) {
+		Bit16s sample0,sample1;
+		Bit16s * samples=(Bit16s *)&player.buffer;
+		for (Bitu pos=0;pos<len/4;pos++) {
 #if defined(WORDS_BIGENDIAN)
-	player.channel->AddSamples_s16_nonnative(len/4,(Bit16s *)player.buffer);
+			sample0=(Bit16s)host_readw((HostPt)&samples[pos*2+player.ctrlData.out[0]]);
+			sample1=(Bit16s)host_readw((HostPt)&samples[pos*2+player.ctrlData.out[1]]);
 #else
+			sample0=samples[pos*2+player.ctrlData.out[0]];
+			sample1=samples[pos*2+player.ctrlData.out[1]];
+#endif
+			samples[pos*2+0]=(Bit16s)(sample0*player.ctrlData.vol[0]/255.0);
+			samples[pos*2+1]=(Bit16s)(sample1*player.ctrlData.vol[1]/255.0);
+		}
+#if defined(WORDS_BIGENDIAN)
+		player.channel->AddSamples_s16(len/4,(Bit16s *)player.buffer);
+	} else	player.channel->AddSamples_s16_nonnative(len/4,(Bit16s *)player.buffer);
+#else
+	}
 	player.channel->AddSamples_s16(len/4,(Bit16s *)player.buffer);
 #endif
 	memmove(player.buffer, &player.buffer[len], player.bufLen - len);
@@ -507,7 +543,8 @@ bool CDROM_Interface_Image::LoadCueSheet(char *cuefile)
 #if defined(C_SDL_SOUND)
 			//The next if has been surpassed by the else, but leaving it in as not 
 			//to break existing cue sheets that depend on this.(mine with OGG tracks specifying MP3 as type)
-			else if (type == "WAVE" || type == "AIFF" || type == "MP3") {
+			//else if (type == "WAVE" || type == "AIFF" || type == "MP3") {
+			else if (type == "MP3") {	// support only MP3 and OGG
 				track.file = new AudioFile(filename.c_str(), error);
 			} else { 
 				const Sound_DecoderInfo **i;
@@ -636,7 +673,30 @@ bool CDROM_Interface_Image::GetRealFileName(string &filename, string &pathname)
 			return true;
 		}
 	}
+#if defined (WIN32) || defined(OS2)
+	//Nothing
+#else
+	//Consider the possibility that the filename has a windows directory seperator (inside the CUE file)
+	//which is common for some commercial rereleases of DOS games using DOSBox
+
+	string copy = filename;
+	size_t l = copy.size();
+	for (size_t i = 0; i < l;i++) {
+		if(copy[i] == '\\') copy[i] = '/';
+	}
 	
+	if (stat(copy.c_str(), &test) == 0) {
+		filename = copy;
+		return true;
+	}
+
+	tmpstr = pathname + "/" + copy;
+	if (stat(tmpstr.c_str(), &test) == 0) {
+		filename = tmpstr;
+		return true;
+	}
+
+#endif
 	return false;
 }
 

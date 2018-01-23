@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -290,7 +290,11 @@ void IO_WriteB(Bitu port,Bitu val) {
 	log_io(0, true, port, val);
 	if (GCC_UNLIKELY(GETFLAG(VM) && (CPU_IO_Exception(port,1)))) {
 		LazyFlags old_lflags;
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&old_lflags,&lflags,sizeof(LazyFlags));
+#else
 		memcpy(&old_lflags,&lflags,sizeof(LazyFlags));
+#endif
 		CPU_Decoder * old_cpudecoder;
 		old_cpudecoder=cpudecoder;
 		cpudecoder=&IOFaultCore;
@@ -313,7 +317,11 @@ void IO_WriteB(Bitu port,Bitu val) {
 
 		reg_al = old_al;
 		reg_dx = old_dx;
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&lflags,&old_lflags,sizeof(LazyFlags));
+#else
 		memcpy(&lflags,&old_lflags,sizeof(LazyFlags));
+#endif
 		cpudecoder=old_cpudecoder;
 	}
 	else {
@@ -326,7 +334,11 @@ void IO_WriteW(Bitu port,Bitu val) {
 	log_io(1, true, port, val);
 	if (GCC_UNLIKELY(GETFLAG(VM) && (CPU_IO_Exception(port,2)))) {
 		LazyFlags old_lflags;
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&old_lflags,&lflags,sizeof(LazyFlags));
+#else
 		memcpy(&old_lflags,&lflags,sizeof(LazyFlags));
+#endif
 		CPU_Decoder * old_cpudecoder;
 		old_cpudecoder=cpudecoder;
 		cpudecoder=&IOFaultCore;
@@ -349,7 +361,11 @@ void IO_WriteW(Bitu port,Bitu val) {
 
 		reg_ax = old_ax;
 		reg_dx = old_dx;
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&lflags,&old_lflags,sizeof(LazyFlags));
+#else
 		memcpy(&lflags,&old_lflags,sizeof(LazyFlags));
+#endif
 		cpudecoder=old_cpudecoder;
 	}
 	else {
@@ -362,7 +378,11 @@ void IO_WriteD(Bitu port,Bitu val) {
 	log_io(2, true, port, val);
 	if (GCC_UNLIKELY(GETFLAG(VM) && (CPU_IO_Exception(port,4)))) {
 		LazyFlags old_lflags;
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&old_lflags,&lflags,sizeof(LazyFlags));
+#else
 		memcpy(&old_lflags,&lflags,sizeof(LazyFlags));
+#endif
 		CPU_Decoder * old_cpudecoder;
 		old_cpudecoder=cpudecoder;
 		cpudecoder=&IOFaultCore;
@@ -385,7 +405,11 @@ void IO_WriteD(Bitu port,Bitu val) {
 
 		reg_eax = old_eax;
 		reg_dx = old_dx;
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&lflags,&old_lflags,sizeof(LazyFlags));
+#else
 		memcpy(&lflags,&old_lflags,sizeof(LazyFlags));
+#endif
 		cpudecoder=old_cpudecoder;
 	}
 	else io_writehandlers[2][port](port,val,4);
@@ -395,7 +419,11 @@ Bitu IO_ReadB(Bitu port) {
 	Bitu retval;
 	if (GCC_UNLIKELY(GETFLAG(VM) && (CPU_IO_Exception(port,1)))) {
 		LazyFlags old_lflags;
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&old_lflags,&lflags,sizeof(LazyFlags));
+#else
 		memcpy(&old_lflags,&lflags,sizeof(LazyFlags));
+#endif
 		CPU_Decoder * old_cpudecoder;
 		old_cpudecoder=cpudecoder;
 		cpudecoder=&IOFaultCore;
@@ -416,7 +444,11 @@ Bitu IO_ReadB(Bitu port) {
 
 		retval = reg_al;
 		reg_dx = old_dx;
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&lflags,&old_lflags,sizeof(LazyFlags));
+#else
 		memcpy(&lflags,&old_lflags,sizeof(LazyFlags));
+#endif
 		cpudecoder=old_cpudecoder;
 		return retval;
 	}
@@ -432,7 +464,11 @@ Bitu IO_ReadW(Bitu port) {
 	Bitu retval;
 	if (GCC_UNLIKELY(GETFLAG(VM) && (CPU_IO_Exception(port,2)))) {
 		LazyFlags old_lflags;
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&old_lflags,&lflags,sizeof(LazyFlags));
+#else
 		memcpy(&old_lflags,&lflags,sizeof(LazyFlags));
+#endif
 		CPU_Decoder * old_cpudecoder;
 		old_cpudecoder=cpudecoder;
 		cpudecoder=&IOFaultCore;
@@ -453,7 +489,11 @@ Bitu IO_ReadW(Bitu port) {
 
 		retval = reg_ax;
 		reg_dx = old_dx;
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&lflags,&old_lflags,sizeof(LazyFlags));
+#else
 		memcpy(&lflags,&old_lflags,sizeof(LazyFlags));
+#endif
 		cpudecoder=old_cpudecoder;
 	}
 	else {
@@ -468,7 +508,11 @@ Bitu IO_ReadD(Bitu port) {
 	Bitu retval;
 	if (GCC_UNLIKELY(GETFLAG(VM) && (CPU_IO_Exception(port,4)))) {
 		LazyFlags old_lflags;
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&old_lflags,&lflags,sizeof(LazyFlags));
+#else
 		memcpy(&old_lflags,&lflags,sizeof(LazyFlags));
+#endif
 		CPU_Decoder * old_cpudecoder;
 		old_cpudecoder=cpudecoder;
 		cpudecoder=&IOFaultCore;
@@ -489,7 +533,11 @@ Bitu IO_ReadD(Bitu port) {
 
 		retval = reg_eax;
 		reg_dx = old_dx;
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&lflags,&old_lflags,sizeof(LazyFlags));
+#else
 		memcpy(&lflags,&old_lflags,sizeof(LazyFlags));
+#endif
 		cpudecoder=old_cpudecoder;
 	} else {
 		retval = io_readhandlers[2][port](port,4);

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -41,7 +41,12 @@
 #include "mapper.h"
 #include "ints/int10.h"
 #include "render.h"
-#include "pci_bus.h"
+//#include "pci_bus.h"
+
+#ifdef C_NE2000
+//#include "ne2000.h"
+void NE2K_Init(Section* sec);
+#endif
 
 Config * control;
 MachineType machine;
@@ -52,6 +57,7 @@ void MSG_Init(Section_prop *);
 void LOG_StartUp(void);
 void MEM_Init(Section *);
 void PAGING_Init(Section *);
+void ISAPNP_Cfg_Init(Section *);
 void IO_Init(Section * );
 void CALLBACK_Init(Section*);
 void PROGRAMS_Init(Section*);
@@ -76,8 +82,13 @@ void HARDWARE_Init(Section*);
 
 #if defined(PCI_FUNCTIONALITY_ENABLED)
 void PCI_Init(Section*);
+void VOODOO_Init(Section*);
 #endif
 
+void IDE_Primary_Init(Section*);
+void IDE_Secondary_Init(Section*);
+void IDE_Tertiary_Init(Section*);
+void IDE_Quaternary_Init(Section*);
 
 void KEYBOARD_Init(Section*);	//TODO This should setup INT 16 too but ok ;)
 void JOYSTICK_Init(Section*);
@@ -181,31 +192,45 @@ increaseticks:
 			ticksAdded = ticksRemain;
 			if (CPU_CycleAutoAdjust && !CPU_SkipCycleAutoAdjust) {
 				if (ticksScheduled >= 250 || ticksDone >= 250 || (ticksAdded > 15 && ticksScheduled >= 5) ) {
+					//LOGD(LOG_TAG, "CPU_CycleMax: %d", CPU_CycleMax);
 					if(ticksDone < 1) ticksDone = 1; // Protect against div by zero
 					/* ratio we are aiming for is around 90% usage*/
 					Bit32s ratio = (ticksScheduled * (CPU_CyclePercUsed*90*1024/100/100)) / ticksDone;
 					Bit32s new_cmax = CPU_CycleMax;
-					Bit32u cproc = CPU_CycleMax * ticksScheduled;
+					Bit64s cproc = (Bit64s)CPU_CycleMax * (Bit64s)ticksScheduled;
+					//LOGD(LOG_TAG, "ratio: %d", ratio);
 					if (cproc > 0) {
-						/* ignore the cycles added due to the io delay code in order
+						/* ignore the cycles added due to the IO delay code in order
 						   to have smoother auto cycle adjustments */
-						float ratioremoved = (float) CPU_IODelayRemoved / (float) cproc;
-						if (ratioremoved < 1.0f) {
-							ratio = (Bit32s)((float)ratio * (1 - ratioremoved));
+						double ratioremoved = (double) CPU_IODelayRemoved / (double) cproc;
+						if (ratioremoved < 1.0) {
+							ratio = (Bit32s)((double)ratio * (1 - ratioremoved));
 							/* Don't allow very high ratio which can cause us to lock as we don't scale down
 							 * for very low ratios. High ratio might result because of timing resolution */
 							if (ticksScheduled >= 250 && ticksDone < 10 && ratio > 20480) 
 								ratio = 20480;
 							Bit64s cmax_scaled = (Bit64s)CPU_CycleMax * (Bit64s)ratio;
+							/* The auto cycle code seems reliable enough to disable the fast cut back code.
+							 * This should improve the fluency of complex games.
 							if (ratio <= 1024) 
 								new_cmax = (Bit32s)(cmax_scaled / (Bit64s)1024);
 							else 
-								new_cmax = (Bit32s)(1 + (CPU_CycleMax >> 1) + cmax_scaled / (Bit64s)2048);
+							 */
+							new_cmax = (Bit32s)(1 + (CPU_CycleMax >> 1) + cmax_scaled / (Bit64s)2048);
 						}
 					}
 
 					if (new_cmax<CPU_CYCLES_LOWER_LIMIT)
 						new_cmax=CPU_CYCLES_LOWER_LIMIT;
+
+					/*
+							LOG_MSG("cyclelog: current %6d   cmax %6d   ratio  %5d  done %3d   sched %3d",
+							CPU_CycleMax,
+							new_cmax,
+							ratio,
+							ticksDone,
+							ticksScheduled);
+					*/
 
 					/* ratios below 1% are considered to be dropouts due to
 					   temporary load imbalance, the cycles adjusting is skipped */
@@ -329,6 +354,7 @@ static void DOSBOX_RealInit(Section * sec) {
 	else E_Exit("DOSBOX:Unknown machine type %s",mtype.c_str());
 }
 
+extern bool	enableGlide; // fishstix
 
 void DOSBOX_Init(void) {
 	Section_prop * secprop;
@@ -378,12 +404,36 @@ void DOSBOX_Init(void) {
 	secprop->AddInitFunction(&MEM_Init);//done
 	//secprop->AddInitFunction(&HARDWARE_Init);//done
 	Pint = secprop->Add_int("memsize", Property::Changeable::WhenIdle,loadf->memsize);
-	Pint->SetMinMax(1,63);
+	Pint->SetMinMax(1,511);
 	Pint->Set_help(
 		"Amount of memory DOSBox has in megabytes.\n"
 		"  This value is best left at its default to avoid problems with some games,\n"
 		"  though few games might require a higher value.\n"
 		"  There is generally no speed advantage when raising this value.");
+
+	Pint = secprop->Add_int("memsizekb", Property::Changeable::WhenIdle,0);
+	Pint->SetMinMax(0,524288);
+	Pint->Set_help(
+		"Amount of memory DOSBox has in kilobytes.\n"
+		"  This value should normally be set to 0.\n"
+		"  If nonzero, overrides the memsize parameter.\n"
+		"  Finer grained control of total memory may be useful in\n"
+		"  emulating ancient DOS machines with less than 640KB of\n"
+		"  RAM or early 386 systems with odd extended memory sizes.\n");
+
+	Pint = secprop->Add_int("memalias", Property::Changeable::WhenIdle,0);
+	Pint->SetMinMax(0,32);
+	Pint->Set_help(
+		"Memory aliasing emulation, in number of valid address bits.\n"
+		". Many 386/486 class motherboards and processors prior to 1995\n"
+		"  suffered from memory aliasing for various technical reasons. If the software you are\n"
+		"  trying to run assumes aliasing, or otherwise plays cheap tricks with paging,\n"
+		"  enabling this option can help. Note that enabling this option can cause slight performance degredation. Set to 0 to disable.\n"
+		"  Recommended values when enabled:\n"
+		"    24: 16MB aliasing. Common on 386SX systems (CPU had 24 external address bits)\n"
+		"        or 386DX and 486 systems where the CPU communicated directly with the ISA bus (A24-A31 tied off)\n"
+		"    26: 64MB aliasing. Some 486s had only 26 external address bits, some motherboards tied off A26-A31\n");
+
 	secprop->AddInitFunction(&CALLBACK_Init);
 	secprop->AddInitFunction(&PIC_Init);//done
 	secprop->AddInitFunction(&PROGRAMS_Init);
@@ -430,7 +480,7 @@ void DOSBOX_Init(void) {
 	Pstring->Set_help("CPU Core used in emulation. auto will switch to dynamic if available and\n"
 		"appropriate.");
 
-	const char* cputype_values[] = { "auto", "386", "386_slow", "486_slow", "pentium_slow", "386_prefetch", 0};
+	const char* cputype_values[] = {"auto", "386", "486", "pentium", "386_prefetch", "pentium_slow", "pentium_mmx", 0};
 	Pstring = secprop->Add_string("cputype",Property::Changeable::Always,"auto");
 	Pstring->Set_values(cputype_values);
 	Pstring->Set_help("CPU Type used in emulation. auto is the fastest choice.");
@@ -466,20 +516,41 @@ void DOSBOX_Init(void) {
 	Pint = secprop->Add_int("cycledown",Property::Changeable::Always,20);
 	Pint->SetMinMax(1,1000000);
 	Pint->Set_help("Setting it lower than 100 will be a percentage.");
-		
+
+	Pbool = secprop->Add_bool("isapnpbios",Property::Changeable::WhenIdle,true);
+	Pbool->Set_help("Emulate ISA Plug & Play BIOS. Enable if using DOSBox to run a PnP aware DOS program or if booting Windows 9x.\n"
+			"Do not disable if Windows 9x is configured around PnP devices, you will likely confuse it.");
+
 #if C_FPU
 	secprop->AddInitFunction(&FPU_Init);
 #endif
 	secprop->AddInitFunction(&DMA_Init);//done
 	secprop->AddInitFunction(&VGA_Init);
 	secprop->AddInitFunction(&KEYBOARD_Init);
+	secprop->AddInitFunction(&ISAPNP_Cfg_Init);
 
 
 #if defined(PCI_FUNCTIONALITY_ENABLED)
-	secprop=control->AddSection_prop("pci",&PCI_Init,false); //PCI bus
+	if (enableGlide) {
+		secprop=control->AddSection_prop("pci",&PCI_Init,false); //PCI bus
+
+		secprop->AddInitFunction(&VOODOO_Init,true);
+		const char* voodoo_settings[] = {
+				"false",
+				"software",
+#if C_OPENGL
+				"opengl",
+#endif
+				"auto",
+				0
+		};
+		Pstring = secprop->Add_string("voodoo",Property::Changeable::WhenIdle,"auto");
+		Pstring->Set_values(voodoo_settings);
+		Pstring->Set_help("Enable VOODOO support.");
+	}
 #endif
 
-
+if (loadf->soundEnable) {
 	secprop=control->AddSection_prop("mixer",&MIXER_Init);
 	Pbool = secprop->Add_bool("nosound",Property::Changeable::OnlyAtStart,false);
 	Pbool->Set_help("Enable silent mode, sound is still emulated though.");
@@ -534,6 +605,47 @@ void DOSBOX_Init(void) {
 	Pstring->Set_values(mt32thread);
 	Pstring->Set_help("MT-32 rendering in separate thread");
 
+	const char *mt32DACModes[] = {"0", "1", "2", "3", "auto",0};
+	Pstring = secprop->Add_string("mt32.dac",Property::Changeable::WhenIdle,"auto");
+	Pstring->Set_values(mt32DACModes);
+	Pstring->Set_help("MT-32 DAC input emulation mode\n"
+		"Nice = 0 - default\n"
+		"Produces samples at double the volume, without tricks.\n"
+		"Higher quality than the real devices\n\n"
+
+		"Pure = 1\n"
+		"Produces samples that exactly match the bits output from the emulated LA32.\n"
+		"Nicer overdrive characteristics than the DAC hacks (it simply clips samples within range)\n"
+		"Much less likely to overdrive than any other mode.\n"
+		"Half the volume of any of the other modes, meaning its volume relative to the reverb\n"
+		"output when mixed together directly will sound wrong. So, reverb level must be lowered.\n"
+		"Perfect for developers while debugging :)\n\n"
+
+		"GENERATION1 = 2\n"
+		"Re-orders the LA32 output bits as in early generation MT-32s (according to Wikipedia).\n"
+		"Bit order at DAC (where each number represents the original LA32 output bit number, and XX means the bit is always low):\n"
+		"15 13 12 11 10 09 08 07 06 05 04 03 02 01 00 XX\n\n"
+
+		"GENERATION2 = 3\n"
+		"Re-orders the LA32 output bits as in later geneerations (personally confirmed on my CM-32L - KG).\n"
+		"Bit order at DAC (where each number represents the original LA32 output bit number):\n"
+		"15 13 12 11 10 09 08 07 06 05 04 03 02 01 00 14\n");
+
+	const char *mt32reverbModes[] = {"0", "1", "2", "3", "auto",0};
+	Pstring = secprop->Add_string("mt32.reverb.mode",Property::Changeable::WhenIdle,"auto");
+	Pstring->Set_values(mt32reverbModes);
+	Pstring->Set_help("MT-32 reverb mode");
+
+	const char *mt32reverbTimes[] = {"0", "1", "2", "3", "4", "5", "6", "7",0};
+	Pint = secprop->Add_int("mt32.reverb.time",Property::Changeable::WhenIdle,5);
+	Pint->Set_values(mt32reverbTimes);
+	Pint->Set_help("MT-32 reverb decaying time"); 
+
+	const char *mt32reverbLevels[] = {"0", "1", "2", "3", "4", "5", "6", "7",0};
+	Pint = secprop->Add_int("mt32.reverb.level",Property::Changeable::WhenIdle,3);
+	Pint->Set_values(mt32reverbLevels);
+	Pint->Set_help("MT-32 reverb level");
+
 #if C_DEBUG
 	secprop=control->AddSection_prop("debug",&DEBUG_Init);
 #endif
@@ -574,7 +686,7 @@ void DOSBOX_Init(void) {
 	Pstring->Set_values(oplemus);
 	Pstring->Set_help("Provider for the OPL emulation. compat might provide better quality (see oplrate as well).");
 
-	Pint = secprop->Add_int("oplrate",Property::Changeable::WhenIdle,22050);
+	Pint = secprop->Add_int("oplrate",Property::Changeable::WhenIdle,16000);
 	Pint->Set_values(oplrates);
 	Pint->Set_help("Sample rate of OPL music emulation. Use 49716 for highest quality (set the mixer rate accordingly).");
 
@@ -583,7 +695,7 @@ void DOSBOX_Init(void) {
 	Pbool = secprop->Add_bool("gus",Property::Changeable::WhenIdle,false); 	
 	Pbool->Set_help("Enable the Gravis Ultrasound emulation.");
 
-	Pint = secprop->Add_int("gusrate",Property::Changeable::WhenIdle,44100);
+	Pint = secprop->Add_int("gusrate",Property::Changeable::WhenIdle,16000);
 	Pint->Set_values(rates);
 	Pint->Set_help("Sample rate of Ultrasound emulation.");
 
@@ -620,7 +732,7 @@ void DOSBOX_Init(void) {
 	Pstring->Set_values(tandys);
 	Pstring->Set_help("Enable Tandy Sound System emulation. For 'auto', emulation is present only if machine is set to 'tandy'.");
 	
-	Pint = secprop->Add_int("tandyrate",Property::Changeable::WhenIdle,44100);
+	Pint = secprop->Add_int("tandyrate",Property::Changeable::WhenIdle,16000);
 	Pint->Set_values(rates);
 	Pint->Set_help("Sample rate of the Tandy 3-Voice generation.");
 
@@ -628,6 +740,7 @@ void DOSBOX_Init(void) {
 	
 	Pbool = secprop->Add_bool("disney",Property::Changeable::WhenIdle,true);
 	Pbool->Set_help("Enable Disney Sound Source emulation. (Covox Voice Master and Speech Thing compatible).");
+}
 
 	secprop=control->AddSection_prop("joystick",&BIOS_Init,false);//done
 	secprop->AddInitFunction(&INT10_Init);
@@ -732,7 +845,64 @@ void DOSBOX_Init(void) {
 	Pbool = secprop->Add_bool("ipx",Property::Changeable::WhenIdle, false);
 	Pbool->Set_help("Enable ipx over UDP/IP emulation.");
 #endif
+
+#ifdef C_NE2000
+	secprop=control->AddSection_prop("ne2000",&NE2K_Init,true);
+	MSG_Add("NE2000_CONFIGFILE_HELP",
+		"macaddr -- The physical address the emulator will use on your network.\n"
+		"           If you have multiple DOSBoxes running on your network,\n"
+		"           this has to be changed. Modify the last three number blocks.\n"
+		"           I.e. AC:DE:48:88:99:AB.\n"
+		"realnic -- Specifies which of your network interfaces is used.\n"
+		"           Write \'list\' here to see the list of devices in the\n"
+		"           Status Window. Then make your choice and put either the\n"
+		"           interface number (2 or something) or a part of your adapters\n"
+		"           name, e.g. VIA here.\n"
+
+	);
+
+	Pbool = secprop->Add_bool("ne2000", Property::Changeable::WhenIdle, true);
+	Pbool->Set_help("Enable Ethernet passthrough. Requires [Win]Pcap.");
+
+	Phex = secprop->Add_hex("nicbase", Property::Changeable::WhenIdle, 0x300);
+	Phex->Set_help("The base address of the NE2000 board.");
+
+	Pint = secprop->Add_int("nicirq", Property::Changeable::WhenIdle, 3);
+	Pint->Set_help("The interrupt it uses. Note serial2 uses IRQ3 as default.");
+
+	Pstring = secprop->Add_string("macaddr", Property::Changeable::WhenIdle,"AC:DE:48:88:99:AA");
+	Pstring->Set_help("The physical address the emulator will use on your network.\n"
+		"If you have multiple DOSBoxes running on your network,\n"
+		"this has to be changed for each. AC:DE:48 is an address range reserved for\n"
+		"private use, so modify the last three number blocks.\n"
+		"I.e. AC:DE:48:88:99:AB.");
+	
+	Pstring = secprop->Add_string("realnic", Property::Changeable::WhenIdle,"list");
+	Pstring->Set_help("Specifies which of your network interfaces is used.\n"
+		"Write \'list\' here to see the list of devices in the\n"
+		"Status Window. Then make your choice and put either the\n"
+		"interface number (2 or something) or a part of your adapters\n"
+		"name, e.g. VIA here.");
+#endif // C_NE2000
+
 //	secprop->AddInitFunction(&CREDITS_Init);
+
+	/* IDE emulation options and setup */
+	secprop=control->AddSection_prop("ide, primary",&IDE_Primary_Init,false);//done
+	Pbool = secprop->Add_bool("enable",Property::Changeable::OnlyAtStart,false);
+	Pbool->Set_help("Enable IDE interface");
+
+	secprop=control->AddSection_prop("ide, secondary",&IDE_Secondary_Init,false);//done
+	Pbool = secprop->Add_bool("enable",Property::Changeable::OnlyAtStart,false);
+	Pbool->Set_help("Enable IDE interface");
+
+	secprop=control->AddSection_prop("ide, tertiary",&IDE_Tertiary_Init,false);//done
+	Pbool = secprop->Add_bool("enable",Property::Changeable::OnlyAtStart,false);
+	Pbool->Set_help("Enable IDE interface");
+
+	secprop=control->AddSection_prop("ide, quaternary",&IDE_Quaternary_Init,false);//done
+	Pbool = secprop->Add_bool("enable",Property::Changeable::OnlyAtStart,false);
+	Pbool->Set_help("Enable IDE interface");
 
 	//TODO ?
 	secline=control->AddSection_line("autoexec",&AUTOEXEC_Init);

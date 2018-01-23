@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -265,21 +265,21 @@ void DOS_Shell::ParseLine(char * line) {
 
 
 
-void DOS_Shell::RunInternal(void)
-{
+void DOS_Shell::RunInternal(void) {
 	char input_line[CMD_MAXLINE] = {0};
-	while(bf && bf->ReadLine(input_line)) 
-	{
-		if (echo) {
+	while (bf) {
+		if (bf->ReadLine(input_line)) {
+			if (echo) {
 				if (input_line[0] != '@') {
 					ShowPrompt();
 					WriteOut_NoParsing(input_line);
 					WriteOut_NoParsing("\n");
-				};
-			};
-		ParseLine(input_line);
+				}
+			}
+			ParseLine(input_line);
+			if (echo) WriteOut_NoParsing("\n");
+		}
 	}
-	return;
 }
 
 #include "loader.h"
@@ -471,7 +471,7 @@ void SHELL_Init() {
 	MSG_Add("SHELL_ILLEGAL_SWITCH","Illegal switch: %s.\n");
 	MSG_Add("SHELL_MISSING_PARAMETER","Required parameter missing.\n");
 	MSG_Add("SHELL_CMD_CHDIR_ERROR","Unable to change to: %s.\n");
-	MSG_Add("SHELL_CMD_CHDIR_HINT","To change to different drive type \033[31m%c:\033[0m\n");
+	MSG_Add("SHELL_CMD_CHDIR_HINT","Hint: To change to different drive type \033[31m%c:\033[0m\n");
 	MSG_Add("SHELL_CMD_CHDIR_HINT_2","directoryname is longer than 8 characters and/or contains spaces.\nTry \033[31mcd %s\033[0m\n");
 	MSG_Add("SHELL_CMD_CHDIR_HINT_3","You are still on drive Z:, change to a mounted drive with \033[31mC:\033[0m.\n");
 	MSG_Add("SHELL_CMD_DATE_HELP","Displays or changes the internal date.\n");
@@ -532,7 +532,8 @@ void SHELL_Init() {
 		"\xBA                                                                    \xBA\n"
 	);
 	MSG_Add("SHELL_STARTUP_CGA","\xBA DOSBox supports Composite CGA mode.                                \xBA\n"
-	        "\xBA Use \033[31m(alt-)F11\033[37m to change the colours when in this mode.             \xBA\n"
+	        "\xBA Use \033[31mF12\033[37m to set composite output ON, OFF, or AUTO (default).        \xBA\n"
+	        "\xBA \033[31m(Alt-)F11\033[37m changes hue; \033[31mctrl-alt-F11\033[37m selects early/late CGA model.  \xBA\n"
 	        "\xBA                                                                    \xBA\n"
 	);
 	MSG_Add("SHELL_STARTUP_HERC","\xBA Use \033[31mF11\033[37m to cycle through white, amber, and green monochrome color. \xBA\n"
@@ -659,7 +660,7 @@ void SHELL_Init() {
 	DOS_ForceDuplicateEntry(1,0);				/* "new" STDIN */
 	DOS_ForceDuplicateEntry(1,2);				/* STDERR */
 	DOS_OpenFile("CON",OPEN_READWRITE,&dummy);	/* STDAUX */
-	DOS_OpenFile("CON",OPEN_READWRITE,&dummy);	/* STDPRN */
+	DOS_OpenFile("PRN",OPEN_READWRITE,&dummy);	/* STDPRN */
 
 	psp.SetParent(psp_seg);
 	/* Set the environment */

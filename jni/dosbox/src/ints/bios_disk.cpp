@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,8 +20,11 @@
 #include "dosbox.h"
 #include "callback.h"
 #include "bios.h"
+#include "bios_disk.h"
 #include "regs.h"
+#include "pic.h"
 #include "mem.h"
+#include "inout.h"
 #include "dos_inc.h" /* for Drives[] */
 #include "../dos/drives.h"
 #include "mapper.h"
@@ -58,6 +61,13 @@ void CMOS_SetRegister(Bitu regNr, Bit8u val); //For setting equipment word
 imageDisk *imageDiskList[MAX_DISK_IMAGES];
 imageDisk *diskSwap[MAX_SWAPPABLE_DISKS];
 Bits swapPosition;
+
+imageDisk *GetINT13HardDrive(unsigned char drv) {
+	if (drv < 0x80 || drv >= (0x80+MAX_DISK_IMAGES-2))
+		return NULL;
+
+	return imageDiskList[drv-0x80];
+}
 
 void updateDPT(void) {
 	Bit32u tmpheads, tmpcyl, tmpsect, tmpsize;
@@ -333,14 +343,14 @@ static Bitu INT13_DiskHandler(void) {
 				if ((machine==MCH_CGA) || (machine==MCH_PCJR)) {
 					/* those bioses call floppy drive reset for invalid drive values */
 					if (((imageDiskList[0]) && (imageDiskList[0]->active)) || ((imageDiskList[1]) && (imageDiskList[1]->active))) {
-						if (reg_dl<0x80) reg_ip++;
+						if (machine!=MCH_PCJR && reg_dl<0x80) reg_ip++;
 						last_status = 0x00;
 						CALLBACK_SCF(false);
 					}
 				}
 				return CBRET_NONE;
 			}
-			if (reg_dl<0x80) reg_ip++;
+			if (machine!=MCH_PCJR && reg_dl<0x80) reg_ip++;
 			last_status = 0x00;
 			CALLBACK_SCF(false);
 		}
@@ -449,6 +459,24 @@ static Bitu INT13_DiskHandler(void) {
 		//reg_al = 0x00; /* CRC verify succeeded */
 		CALLBACK_SCF(false);
           
+		break;
+	case 0x05: /* Format track */
+		/* ignore it. I just fucking want FORMAT.COM to write the FAT structure for God's sake */
+		fprintf(stderr,"WARNING: Format track ignored\n");
+		CALLBACK_SCF(false);
+		reg_ah = 0x00;
+		break;
+	case 0x06: /* Format track set bad sector flags */
+		/* ignore it. I just fucking want FORMAT.COM to write the FAT structure for God's sake */
+		fprintf(stderr,"WARNING: Format track set bad sector flags ignored (6)\n");
+		CALLBACK_SCF(false);
+		reg_ah = 0x00;
+		break;
+	case 0x07: /* Format track set bad sector flags */
+		/* ignore it. I just fucking want FORMAT.COM to write the FAT structure for God's sake */
+		fprintf(stderr,"WARNING: Format track set bad sector flags ignored (7)\n");
+		CALLBACK_SCF(false);
+		reg_ah = 0x00;
 		break;
 	case 0x08: /* Get drive parameters */
 		if(driveInactive(drivenum)) {

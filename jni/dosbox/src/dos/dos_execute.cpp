@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -225,6 +225,10 @@ bool DOS_ChildPSP(Bit16u segment, Bit16u size) {
 	psp.SetFCB2(RealMake(parent_psp_seg,0x6c));
 	psp.SetEnvironment(psp_parent.GetEnvironment());
 	psp.SetSize(size);
+	// push registers in case child PSP is terminated
+	SaveRegisters();
+	psp.SetStack(RealMakeSeg(ss,reg_sp));
+	reg_sp+=18;
 	return true;
 }
 
@@ -250,8 +254,6 @@ static void SetupCMDLine(Bit16u pspseg,DOS_ParamBlock & block) {
 	// if cmdtail==0 it will inited as empty in SetCommandTail
 	psp.SetCommandTail(block.exec.cmdtail);
 }
-
-//extern char absoluteDName[40];
 
 bool DOS_Execute(char * name,PhysPt block_pt,Bit8u flags) {
 	EXE_Header head;Bitu i;
@@ -307,9 +309,6 @@ bool DOS_Execute(char * name,PhysPt block_pt,Bit8u flags) {
 			if (imagesize+headersize<512) imagesize = 512-headersize;
 		}
 	}
-	//if ((name != NULL)&&(strlen(name)<40)) {
-	//	strcpy(absoluteDName,name);
-	//}
 	Bit8u * loadbuf=(Bit8u *)new Bit8u[0x10000];
 	if (flags!=OVERLAY) {
 		/* Create an environment block */

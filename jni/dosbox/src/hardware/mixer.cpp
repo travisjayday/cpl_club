@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -33,6 +33,10 @@
 #endif
 #include <windows.h>
 #include <mmsystem.h>
+#endif
+
+#if HAVE_NEON
+#include "math_neon.h"
 #endif
 
 #include "SDL.h"
@@ -166,7 +170,6 @@ inline void MixerChannel::AddSamples(Bitu len, const Type* data) {
 	Bitu mixpos=mixer.pos+done;
 	freq_index&=MIXER_REMAIN;
 	Bitu pos=0;Bitu new_pos;
-
 	goto thestart;
 	for (;;) {
 		new_pos=freq_index >> MIXER_SHIFT;
@@ -366,6 +369,7 @@ static void MIXER_MixData(Bitu needed) {
 		if (added>1024) 
 			added=1024;
 		Bitu readpos=(mixer.pos+mixer.done)&MIXER_BUFMASK;
+
 		for (Bitu i=0;i<added;i++) {
 			Bits sample=mixer.work[readpos][0] >> MIXER_VOLSHIFT;
 			convert[i][0]=MIXER_CLIP(sample);
@@ -503,15 +507,10 @@ static void MIXER_CallBack(void * userdata, Uint8 *stream, int len) {
 			Bitu i = (pos + (index >> MIXER_SHIFT )) & MIXER_BUFMASK;
 			index += index_add;
 			if (enableMixerHack) {
-				*output++ = MIXER_CLIP( ((mixer.work[i][0]>>MIXER_VOLSHIFT) + (mixer.work[i][1]>>MIXER_VOLSHIFT))>>2 );
-				//*output++ = ((MIXER_CLIP(mixer.work[i][0]>>MIXER_VOLSHIFT)+MIXER_CLIP(mixer.work[i][1]>>MIXER_VOLSHIFT)))>>2;
-				//*output++ = MIXER_CLIP(mixer.work[i][0]>>MIXER_VOLSHIFT);
+				*output++ = MIXER_CLIP( ((mixer.work[i][0]>>MIXER_VOLSHIFT) + (mixer.work[i][1]>>MIXER_VOLSHIFT))/2 );
 			}
 			else {
-				/*sample=mixer.work[i][0]>>MIXER_VOLSHIFT;
-				*output++=MIXER_CLIP(sample);
-				sample=mixer.work[i][1]>>MIXER_VOLSHIFT;
-				*output++=MIXER_CLIP(sample); */
+
 				*output++=MIXER_CLIP(mixer.work[i][0]>>MIXER_VOLSHIFT);
 				*output++=MIXER_CLIP(mixer.work[i][1]>>MIXER_VOLSHIFT);
 			}
@@ -527,15 +526,10 @@ static void MIXER_CallBack(void * userdata, Uint8 *stream, int len) {
 		while (reduce--) {
 			pos &= MIXER_BUFMASK;
 			if (enableMixerHack) {
-				*output++ = MIXER_CLIP( ((mixer.work[pos][0]>>MIXER_VOLSHIFT) + (mixer.work[pos][1]>>MIXER_VOLSHIFT))>>2 );
-				//*output++ = ((MIXER_CLIP(mixer.work[pos][0]>>MIXER_VOLSHIFT)+MIXER_CLIP(mixer.work[pos][1]>>MIXER_VOLSHIFT)))>>2;
-				//*output++=MIXER_CLIP(mixer.work[pos][0]>>MIXER_VOLSHIFT);
+				*output++ = MIXER_CLIP( ((mixer.work[pos][0]>>MIXER_VOLSHIFT) + (mixer.work[pos][1]>>MIXER_VOLSHIFT))/2 );
+
 			}
 			else {
-				/*sample=mixer.work[pos][0]>>MIXER_VOLSHIFT;
-				*output++=MIXER_CLIP(sample);
-				sample=mixer.work[pos][1]>>MIXER_VOLSHIFT;
-				*output++=MIXER_CLIP(sample); */
 				*output++=MIXER_CLIP(mixer.work[pos][0]>>MIXER_VOLSHIFT);
 				*output++=MIXER_CLIP(mixer.work[pos][1]>>MIXER_VOLSHIFT);
 			}
@@ -565,7 +559,11 @@ public:
 				++scan;continue;
 			}
 			if (!db) val/=100;
+#if HAVE_NEON
+			else val=powf_neon(10.0f,(float)val/20.0f);
+#else
 			else val=powf(10.0f,(float)val/20.0f);
+#endif
 			if (val<0) val=1.0f;
 			if (!w) {
 				vol0=val;
@@ -648,7 +646,18 @@ void MIXER_Init(Section* sec) {
 
 	Section_prop * section=static_cast<Section_prop *>(sec);
 	/* Read out config section */
-	mixer.freq=section->Get_int("rate");
+	//mixer.freq=section->Get_int("rate");
+	if (enableMixerHack) {
+		// cap sample rates at 16000 on our phones with mixer hack
+		if (section->Get_int("rate") > 16000) {
+			mixer.freq = 16000;
+		} else {
+			mixer.freq = section->Get_int("rate");
+		}
+	} else {
+		mixer.freq=section->Get_int("rate");
+	}
+
 	mixer.nosound=section->Get_bool("nosound");
 	mixer.blocksize=section->Get_int("blocksize");
 
@@ -665,11 +674,13 @@ void MIXER_Init(Section* sec) {
 	SDL_AudioSpec obtained;
 
 	spec.freq=mixer.freq;
-	spec.format=AUDIO_S16SYS;
-	if (enableMixerHack)
+	if (enableMixerHack) {
 		spec.channels=1;
-	else
+		spec.format=AUDIO_S8;
+	} else {
 		spec.channels=2;
+		spec.format=AUDIO_S16SYS;
+	}
 	spec.callback=MIXER_CallBack;
 	spec.userdata=NULL;
 	spec.samples=(Uint16)mixer.blocksize;

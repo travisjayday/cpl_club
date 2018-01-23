@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -30,10 +30,13 @@ static void DOS_CompressMemory(void) {
 	Bit16u mcb_segment=dos.firstMCB;
 	DOS_MCB mcb(mcb_segment);
 	DOS_MCB mcb_next(0);
+	Bitu counter=0;
 
-	while (mcb.GetType()!=0x5a) {
+	while (mcb.GetType()!='Z') {
+		if(counter++ > 10000000) E_Exit("DOS MCB list corrupted.");
 		mcb_next.SetPt((Bit16u)(mcb_segment+mcb.GetSize()+1));
-		if ((mcb.GetPSPSeg()==0) && (mcb_next.GetPSPSeg()==0)) {
+		if (GCC_UNLIKELY((mcb_next.GetType()!=0x4d) && (mcb_next.GetType()!=0x5a))) E_Exit("Corrupt MCB chain");
+		if ((mcb.GetPSPSeg()==MCB_FREE) && (mcb_next.GetPSPSeg()==MCB_FREE)) {
 			mcb.SetSize(mcb.GetSize()+mcb_next.GetSize()+1);
 			mcb.SetType(mcb_next.GetType());
 		} else {
@@ -46,7 +49,9 @@ static void DOS_CompressMemory(void) {
 void DOS_FreeProcessMemory(Bit16u pspseg) {
 	Bit16u mcb_segment=dos.firstMCB;
 	DOS_MCB mcb(mcb_segment);
+	Bitu counter = 0;
 	for (;;) {
+		if(counter++ > 10000000) E_Exit("DOS MCB list corrupted.");
 		if (mcb.GetPSPSeg()==pspseg) {
 			mcb.SetPSPSeg(MCB_FREE);
 		}
@@ -58,6 +63,7 @@ void DOS_FreeProcessMemory(Bit16u pspseg) {
 				mcb.SetType(0x4d);
 			} else break;
 		}
+		if (GCC_UNLIKELY(mcb.GetType()!=0x4d)) E_Exit("Corrupt MCB chain");
 		mcb_segment+=mcb.GetSize()+1;
 		mcb.SetPt(mcb_segment);
 	}
@@ -111,7 +117,7 @@ bool DOS_AllocateMemory(Bit16u * segment,Bit16u * blocks) {
 	Bit16u found_seg=0,found_seg_size=0;
 	for (;;) {
 		mcb.SetPt(mcb_segment);
-		if (mcb.GetPSPSeg()==0) {
+		if (mcb.GetPSPSeg()==MCB_FREE) {
 			/* Check for enough free memory in current block */
 			Bit16u block_size=mcb.GetSize();			
 			if (block_size<(*blocks)) {
@@ -245,6 +251,7 @@ bool DOS_ResizeMemory(Bit16u segment,Bit16u * blocks) {
 		mcb_new_next.SetSize(total-*blocks-1);
 		mcb_new_next.SetPSPSeg(MCB_FREE);
 		mcb.SetPSPSeg(dos.psp());
+		DOS_CompressMemory();
 		return true;
 	}
 	/* MCB will grow, try to join with following MCB */
@@ -305,7 +312,10 @@ bool DOS_FreeMemory(Bit16u segment) {
 
 
 void DOS_BuildUMBChain(bool umb_active,bool ems_active) {
-	if (umb_active  && (machine!=MCH_TANDY)) {
+	unsigned int seg_limit = MEM_TotalPages()*256;
+
+	/* UMBs are only possible if the machine has 1MB+64KB of RAM */
+	if (umb_active && (machine!=MCH_TANDY) && seg_limit >= (0x10000+0x1000-1)) {
 		Bit16u first_umb_seg = 0xd000;
 		Bit16u first_umb_size = 0x2000;
 		if(ems_active || (machine == MCH_PCJR)) first_umb_size = 0x1000;
@@ -371,6 +381,10 @@ bool DOS_LinkUMBsToMemChain(Bit16u linkstate) {
 			break;
 		case 0x0001:	// link
 			if (mcb.GetType()==0x5a) {
+				if ((mcb_segment+mcb.GetSize()+1) != umb_start) {
+					LOG_MSG("MCB chain no longer goes to end of memory (corruption?), not linking in UMB!");
+					return false;
+				}
 				mcb.SetType(0x4d);
 				dos_infoblock.SetUMBChainState(1);
 			}
@@ -391,6 +405,9 @@ static Bitu DOS_default_handler(void) {
 
 static	CALLBACK_HandlerObject callbackhandler;
 void DOS_SetupMemory(void) {
+	unsigned int seg_limit = MEM_TotalPages()*256;
+	if (seg_limit > 0xA000) seg_limit = 0xA000;
+
 	/* Let dos claim a few bios interrupts. Makes DOSBox more compatible with 
 	 * buggy games, which compare against the interrupt table. (probably a 
 	 * broken linked list implementation) */
@@ -433,14 +450,20 @@ void DOS_SetupMemory(void) {
 	mcb.SetPSPSeg(MCB_FREE);						//Free
 	mcb.SetType(0x5a);								//Last Block
 	if (machine==MCH_TANDY) {
+		if (seg_limit < ((384*1024)/16))
+			E_Exit("Tandy requires at least 384K");
 		/* memory up to 608k available, the rest (to 640k) is used by
 			the tandy graphics system's variable mapping of 0xb800 */
+/*
 		mcb.SetSize(0x9BFF - DOS_MEM_START - mcb_sizes);
+*/		mcb.SetSize(/*0x9BFF*/(seg_limit-0x801) - DOS_MEM_START - mcb_sizes);
 	} else if (machine==MCH_PCJR) {
+		if (seg_limit < ((256*1024)/16))
+			E_Exit("PCjr requires at least 256K");
 		/* memory from 128k to 640k is available */
 		mcb_devicedummy.SetPt((Bit16u)0x2000);
 		mcb_devicedummy.SetPSPSeg(MCB_FREE);
-		mcb_devicedummy.SetSize(0x9FFF - 0x2000);
+		mcb_devicedummy.SetSize(/*0x9FFF*/(seg_limit-1) - 0x2000);
 		mcb_devicedummy.SetType(0x5a);
 
 		/* exclude PCJr graphics region */
@@ -453,11 +476,15 @@ void DOS_SetupMemory(void) {
 		mcb.SetSize(0x1800 - DOS_MEM_START - (2+mcb_sizes));
 		mcb.SetType(0x4d);
 	} else {
+		if (seg_limit < ((192*1024)/16))
+			E_Exit("DOS requires at least 192K");
+
 		/* complete memory up to 640k available */
 		/* last paragraph used to add UMB chain to low-memory MCB chain */
-		mcb.SetSize(0x9FFE - DOS_MEM_START - mcb_sizes);
+		mcb.SetSize(/*0x9FFE*/(seg_limit-2) - DOS_MEM_START - mcb_sizes);
 	}
 
 	dos.firstMCB=DOS_MEM_START;
 	dos_infoblock.SetFirstMCB(DOS_MEM_START);
 }
+

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -62,7 +62,14 @@ private:
 	void (* _start_function)(void);
 	bool secure_mode; //Sandbox mode
 public:
-	Config(CommandLine * cmd):cmdline(cmd),secure_mode(false){}
+	bool initialised;
+	std::vector<std::string> startup_params;
+	std::vector<std::string> configfiles;
+	Config(CommandLine * cmd):cmdline(cmd),secure_mode(false) {
+		startup_params.push_back(cmdline->GetFileName());
+		cmdline->FillVector(startup_params);
+		initialised=false;
+	}
 	~Config();
 
 	Section_line * AddSection_line(char const * const _name,void (*_initfunction)(Section*));

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,6 +21,11 @@
 
 #ifndef DOSBOX_DOSBOX_H
 #include "dosbox.h"
+#endif
+
+#ifdef HAVE_NEON
+#include <arm_neon.h>
+#include <string.h>
 #endif
 
 typedef Bit32u PhysPt;
@@ -214,6 +219,89 @@ static INLINE void RealSetVec(Bit8u vec,RealPt pt,RealPt &old) {
 static INLINE RealPt RealGetVec(Bit8u vec) {
 	return mem_readd(vec<<2);
 }	
+
+#ifdef NEON_MEMORY
+static INLINE void memcpy_neon_X32AL(void * tgr, const void * src, Bit32u cpysize){
+	Bit32u off=0;
+	for(;off<cpysize;off+=32)
+	{
+		int8x8x4_t buf = vld4_dup_s8((Bit8s *)src+off);
+		vst4_s8((Bit8s *)tgr+off,buf);
+	}
+}
+
+static INLINE void memcpy_neon_X24AL(void * tgr, const void * src, Bit32u cpysize){
+	Bit32u off=0;
+	for(;off<cpysize;off+=24)
+	{
+		int8x8x3_t buf = vld3_dup_s8((Bit8s *)src+off);
+		vst3_s8((Bit8s *)tgr+off,buf);
+	}
+}
+
+static INLINE void memcpy_neon_X16AL(void * tgr, const void * src, Bit32u cpysize){
+	Bit32u off=0;
+	for(;off<cpysize;off+=16)
+	{
+		int8x8x2_t buf = vld2_dup_s8((Bit8s *)src+off);
+		vst2_s8((Bit8s *)tgr+off,buf);
+	}
+}
+
+static INLINE void memcpy_neon_X8AL(void * tgr, const void * src, Bit32u cpysize){
+	Bit32u off=0;
+	for(;off<cpysize;off+=8)
+	{
+		int8x8_t buf = vld1_dup_s8((Bit8s *)src+off);
+		vst1_s8((Bit8s *)tgr+off,buf);
+	}
+}
+
+static INLINE void memcpy_neon_UNAL(void * tgr, const void * src, Bit32u cpysize){
+
+	Bit8s * srcd=(Bit8s *)src;
+	Bit8s * tgrd=(Bit8s *)tgr;
+
+	while(cpysize >= 16)
+	{
+		int8x16_t buf = vld1q_s8(srcd);
+		vst1q_s8(tgrd,buf);
+		cpysize-=16;
+		srcd+=16;
+		tgrd+=16;
+	}
+
+	while(cpysize >= 8)
+	{
+			int8x8_t buf = vld1_s8(srcd);
+			vst1_s8(tgrd,buf);
+			cpysize-=8;
+			srcd+=8;
+			tgrd+=8;
+	}
+
+	if(cpysize >0)
+		memcpy(tgrd,srcd,cpysize);
+}
+
+
+static INLINE void memset_neon( void *dest, int value, size_t count)
+{
+	Bit8s * destd =(Bit8s *) dest ;
+	int8x16_t loaded= vdupq_n_s8((int8_t)value);
+	while(count >= 16)
+	{
+		vst1q_s8(destd,loaded);
+		destd+=16;
+		count-=16;
+	}
+
+	if(count > 0)
+	{
+		memset(destd,value,count);
+	}
+}
+#endif
 
 #endif
 

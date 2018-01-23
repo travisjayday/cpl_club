@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -473,7 +473,7 @@ bool DOS_Shell::Execute(char * name,char * args) {
 		/* Fill the command line */
 		CommandTail cmdtail;
 		cmdtail.count = 0;
-		memset(&cmdtail.buffer,0,126); //Else some part of the string is unitialized (valgrind)
+		memset(&cmdtail.buffer,0,127); //Else some part of the string is unitialized (valgrind)
 		if (strlen(line)>126) line[126]=0;
 		cmdtail.count=(Bit8u)strlen(line);
 		memcpy(cmdtail.buffer,line,strlen(line));
@@ -550,13 +550,13 @@ char * DOS_Shell::Which(char * name) {
 	if (!GetEnvStr("PATH",temp)) return 0;
 	const char * pathenv=temp.c_str();
 	if (!pathenv) return 0;
-	pathenv=strchr(pathenv,'=');
+	pathenv = strchr(pathenv,'=');
 	if (!pathenv) return 0;
 	pathenv++;
 	Bitu i_path = 0;
 	while (*pathenv) {
 		/* remove ; and ;; at the beginning. (and from the second entry etc) */
-		while(*pathenv && (*pathenv ==';'))
+		while(*pathenv == ';')
 			pathenv++;
 
 		/* get next entry */
@@ -566,7 +566,7 @@ char * DOS_Shell::Which(char * name) {
 
 		if(i_path == DOS_PATHLENGTH) {
 			/* If max size. move till next ; and terminate path */
-			while(*pathenv != ';') 
+			while(*pathenv && (*pathenv != ';')) 
 				pathenv++;
 			path[DOS_PATHLENGTH - 1] = 0;
 		} else path[i_path] = 0;

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2010  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -16,11 +16,15 @@
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
-/* $Id: sdlmain.cpp,v 1.154 2009-06-01 10:25:51 qbix79 Exp $ */
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
+
+#include <android/log.h>
+#define LOGV(LOG_TAG, ...) __android_log_print(ANDROID_LOG_VERBOSE, LOG_TAG, __VA_ARGS__)
+#define LOGE(LOG_TAG, ...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define LOG_TAG "DosBoxTurbo"
 
 #include <stdlib.h>
 #include <string.h>
@@ -427,7 +431,18 @@ static SDL_Surface * GFX_SetupSurfaceScaled(Bit32u sdl_flags, Bit32u bpp) {
 		return sdl.surface;
 	}
 }
+
+void GFX_TearDown(void) {
+	if (sdl.updating)
+		GFX_EndUpdate( 0 );
+
+	if (sdl.blit.surface) {
+		SDL_FreeSurface(sdl.blit.surface);
+		sdl.blit.surface=0;
+	}
+}
 #endif
+
 Bitu GFX_SetSize(Bitu width,Bitu height,Bitu flags,double scalex,double scaley,GFX_CallBack_t callback) {
 	if (sdl.updating)
 		GFX_EndUpdate( 0 );
@@ -504,7 +519,9 @@ dosurface:
 					sdl.using_windib=false;
 				}
 				SDL_InitSubSystem(SDL_INIT_VIDEO);
+				GFX_SetIcon(); //Set Icon again
 				sdl.surface = SDL_SetVideoMode(width,height,bpp,SDL_HWSURFACE);
+				if(sdl.surface) GFX_SetTitle(-1,-1,false); //refresh title.
 			}
 #endif
 			if (sdl.surface == NULL)
@@ -1067,6 +1084,8 @@ static unsigned char logo[32*32*4]= {
 #include "dosbox_splash.h"
 
 //extern void UI_Run(bool);
+void Restart(bool pressed);
+
 static void GUI_StartUp(Section * sec) {
 	sec->AddDestroyFunction(&GUI_ShutDown);
 	MAPPER_AddHandler(KillSwitch,MK_f9,MMOD1,"shutdown","ShutDown");
@@ -1124,13 +1143,15 @@ static void GUI_StartUp(Section * sec) {
 		char res[100];
 		strncpy( res, fullresolution, sizeof( res ));
 		fullresolution = lowcase (res);//so x and X are allowed
-		if(strcmp(fullresolution,"original")) {
+		if (strcmp(fullresolution,"original")) {
 			sdl.desktop.full.fixed = true;
-			char* height = const_cast<char*>(strchr(fullresolution,'x'));
-			if(height && * height) {
-				*height = 0;
-				sdl.desktop.full.height = (Bit16u)atoi(height+1);
-				sdl.desktop.full.width  = (Bit16u)atoi(res);
+			if (strcmp(fullresolution,"desktop")) { //desktop = 0x0
+				char* height = const_cast<char*>(strchr(fullresolution,'x'));
+				if (height && * height) {
+					*height = 0;
+					sdl.desktop.full.height = (Bit16u)atoi(height+1);
+					sdl.desktop.full.width  = (Bit16u)atoi(res);
+				}
 			}
 		}
 	}
@@ -1152,10 +1173,22 @@ static void GUI_StartUp(Section * sec) {
 		}
 	}
 	sdl.desktop.doublebuf=section->Get_bool("fulldouble");
+#if SDL_VERSION_ATLEAST(1, 2, 10)
+	if (!sdl.desktop.full.width || !sdl.desktop.full.height){
+		//Can only be done on the very first call! Not restartable.
+		const SDL_VideoInfo* vidinfo = SDL_GetVideoInfo();
+		if (vidinfo) {
+			sdl.desktop.full.width = vidinfo->current_w;
+			sdl.desktop.full.height = vidinfo->current_h;
+		}
+	}
+#endif
+
 	if (!sdl.desktop.full.width) {
 #ifdef WIN32
 		sdl.desktop.full.width=(Bit16u)GetSystemMetrics(SM_CXSCREEN);
 #else
+		LOG_MSG("Your fullscreen resolution can NOT be determined, it's assumed to be 1024x768.\nPlease edit the configuration file if this value is wrong.");
 		sdl.desktop.full.width=1024;
 #endif
 	}
@@ -1230,7 +1263,7 @@ static void GUI_StartUp(Section * sec) {
 
 #endif	//OPENGL
 	/* Initialize screen for first time */
-	sdl.surface=SDL_SetVideoMode(640,400,0,0);
+	sdl.surface=SDL_SetVideoMode(320,240,0,0);
 	if (sdl.surface == NULL) E_Exit("Could not initialize video: %s",SDL_GetError());
 	sdl.desktop.bpp=sdl.surface->format->BitsPerPixel;
 	if (sdl.desktop.bpp==24) {
@@ -1315,6 +1348,7 @@ static void GUI_StartUp(Section * sec) {
 	MAPPER_AddHandler(KillSwitch,MK_f9,MMOD1,"shutdown","ShutDown");
 	MAPPER_AddHandler(CaptureMouse,MK_f10,MMOD1,"capmouse","Cap Mouse");
 	MAPPER_AddHandler(SwitchFullScreen,MK_return,MMOD2,"fullscr","Fullscreen");
+	MAPPER_AddHandler(Restart,MK_home,MMOD1|MMOD2,"restart","Restart");
 #if C_DEBUG
 	/* Pause binds with activate-debugger */
 #else
@@ -1392,6 +1426,10 @@ void GFX_LosingFocus(void) {
 }
 
 static int oldx=0,oldy=0,down_x,down_y;
+
+bool GFX_IsFullscreen(void) {
+	return sdl.desktop.fullscreen;
+}
 
 void GFX_Events() {
 	//locnet, exit from shell
@@ -1547,8 +1585,7 @@ void GFX_Events() {
 #ifdef WIN32
 						if (sdl.desktop.fullscreen) {
 							VGA_KillDrawing();
-							sdl.desktop.fullscreen=false;
-							GFX_ResetScreen();
+							GFX_ForceFullscreenExit();
 						}
 #endif
 						GFX_CaptureMouse();
@@ -1666,7 +1703,7 @@ void GFX_ShowMsg(char const* format,...) {
 	vsprintf(buf,format,msg);
         strcat(buf,"\n");
 	va_end(msg);
-	if(!no_stdout) printf("%s",buf); //Else buf is parsed again.
+	//if(!no_stdout) LOGV(LOG_TAG,"%s",buf); //Else buf is parsed again.
 }
 
 
@@ -1685,7 +1722,7 @@ void Config_Add_SDL() {
 	Pbool->Set_help("Use double buffering in fullscreen. It can reduce screen flickering, but it can also result in a slow DOSBox.");
 
 	Pstring = sdl_sec->Add_string("fullresolution",Property::Changeable::Always,"original");
-	Pstring->Set_help("What resolution to use for fullscreen: original or fixed size (e.g. 1024x768).\n"
+	Pstring->Set_help("What resolution to use for fullscreen: original, desktop or a fixed size (e.g. 1024x768).\n"
 	                  "  Using your monitor's native resolution with aspect=true might give the best results.\n"
 			  "  If you end up with small window on a large screen, try an output different from surface.");
 
@@ -1730,7 +1767,7 @@ void Config_Add_SDL() {
 	Pstring->Set_values(inactt);
 
 	Pstring = sdl_sec->Add_path("mapperfile",Property::Changeable::Always,MAPPERFILE);
-	Pstring->Set_help("File used to load/save the key/event mappings from. Resetmapper only works with the defaul value.");
+	Pstring->Set_help("File used to load/save the key/event mappings from. Resetmapper only works with the default value.");
 
 	Pbool = sdl_sec->Add_bool("usescancodes",Property::Changeable::Always,true);
 	Pbool->Set_help("Avoid usage of symkeys, might not work on all operating systems.");
@@ -1743,9 +1780,9 @@ static void show_warning(char const * const message) {
 	if ( !sdl.inited && SDL_Init(SDL_INIT_VIDEO|SDL_INIT_NOPARACHUTE) < 0 ) textonly = true;
 	sdl.inited = true;
 #endif
-//	printf(message);
+	//printf(message);
 	if(textonly) return;
-	if(!sdl.surface) sdl.surface = SDL_SetVideoMode(640,400,0,0);
+	if(!sdl.surface) sdl.surface = SDL_SetVideoMode(320,240,0,0);
 	if(!sdl.surface) return;
 #if SDL_BYTEORDER == SDL_BIG_ENDIAN
 	Bit32u rmask = 0xff000000;
@@ -1800,6 +1837,33 @@ static void launcheditor() {
 	printf("can't find editor(s) specified at the command line.\n");
 	exit(1);
 }
+#if C_DEBUG
+extern void DEBUG_ShutDown(Section * /*sec*/);
+#endif
+
+void restart_program(std::vector<std::string> & parameters) {
+	char** newargs = new char* [parameters.size()+1];
+	// parameter 0 is the executable path
+	// contents of the vector follow
+	// last one is NULL
+	for(Bitu i = 0; i < parameters.size(); i++) newargs[i]=(char*)parameters[i].c_str();
+	newargs[parameters.size()] = NULL;
+	SDL_CloseAudio();
+	SDL_Delay(50);
+	SDL_Quit();
+#if C_DEBUG
+	// shutdown curses
+	DEBUG_ShutDown(NULL);
+#endif
+
+	execvp(newargs[0], newargs);
+	//free(newargs);
+	delete [] newargs;
+}
+void Restart(bool pressed) { // mapper handler
+	restart_program(control->startup_params);
+}
+
 static void launchcaptures(std::string const& edit) {
 	std::string path,file;
 	Section* t = control->GetSection("dosbox");
@@ -1897,7 +1961,7 @@ int dosbox_main(int argc, const char* argv[]) {
 		if(control->cmdline->FindExist("-resetconf")) eraseconfigfile();
 		if(control->cmdline->FindExist("-erasemapper")) erasemapperfile();
 		if(control->cmdline->FindExist("-resetmapper")) erasemapperfile();
-
+		
 		/* Can't disable the console with debugger enabled */
 #if defined(WIN32) && !(C_DEBUG)
 		if (control->cmdline->FindExist("-noconsole")) {
@@ -1922,7 +1986,7 @@ int dosbox_main(int argc, const char* argv[]) {
 #endif  //defined(WIN32) && !(C_DEBUG)
 		if (control->cmdline->FindExist("-version") ||
 		    control->cmdline->FindExist("--version") ) {
-			printf("\nDOSBox version %s, copyright 2002-2010 DOSBox Team.\n\n",VERSION);
+			printf("\nDOSBox version %s, copyright 2002-2013 DOSBox Team.\n\n",VERSION);
 			printf("DOSBox is written by the DOSBox Team (See AUTHORS file))\n");
 			printf("DOSBox comes with ABSOLUTELY NO WARRANTY.  This is free software,\n");
 			printf("and you are welcome to redistribute it under certain conditions;\n");
@@ -1950,7 +2014,7 @@ int dosbox_main(int argc, const char* argv[]) {
 
 	/* Display Welcometext in the console */
 	LOG_MSG("DOSBox version %s",VERSION);
-	LOG_MSG("Copyright 2002-2010 DOSBox Team, published under GNU GPL.");
+	LOG_MSG("Copyright 2002-2013 DOSBox Team, published under GNU GPL.");
 	LOG_MSG("---");
 
 	/* Init SDL */

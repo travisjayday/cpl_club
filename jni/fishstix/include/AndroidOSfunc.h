@@ -29,7 +29,7 @@ void Android_UnlockSurface(int startLine, int endLine);
 void Android_ResetScreen();
 void Android_AudioGetBuffer();
 int Android_OpenAudio(int rate, int channels, int encoding, int bufSize);
+void Android_CloseAudio();
 int Android_PollEvent(struct locnet_al_event *event);
-
 
 #endif

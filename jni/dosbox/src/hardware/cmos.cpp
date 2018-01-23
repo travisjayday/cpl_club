@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -194,9 +194,13 @@ static Bitu cmos_readreg(Bitu port,Bitu iolen) {
 		return ((drive_a << 4) | (drive_b));
 	/* First harddrive info */
 	case 0x12:
+		/* NTS: DOSBox 0.74 mainline has these backwards: the upper nibble is the first hard disk,
+		   the lower nibble is the second hard disk. It makes a big difference to stupid OS's like
+		   Windows 95. */
 		hdparm = 0;
-		if(imageDiskList[2] != NULL) hdparm |= 0xf;
-		if(imageDiskList[3] != NULL) hdparm |= 0xf0;
+		if(imageDiskList[3] != NULL) hdparm |= 0xf;
+		if(imageDiskList[2] != NULL) hdparm |= 0xf0;
+//		hdparm = 0;
 		return hdparm;
 	case 0x19:
 		if(imageDiskList[2] != NULL) return 47; /* User defined type */
@@ -311,6 +315,7 @@ public:
 		cmos.regs[0x16]=(Bit8u)0x02;
 		/* Fill in extended memory size */
 		Bitu exsize=(MEM_TotalPages()*4)-1024;
+		if (exsize > 65535) exsize = 65535; /* cap at 64MB. this value is returned as-is by INT 15H AH=0x88 in a 16-bit register */
 		cmos.regs[0x17]=(Bit8u)exsize;
 		cmos.regs[0x18]=(Bit8u)(exsize >> 8);
 		cmos.regs[0x30]=(Bit8u)exsize;

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -17,7 +17,6 @@
  */
 
 
-//#include "cpu-features.h"
 #include <sys/types.h>
 #include <assert.h>
 #include <math.h>
@@ -36,6 +35,8 @@
 
 Render_t render;
 ScalerLineHandler_t RENDER_DrawLine;
+
+extern	bool	enableRefreshHack;
 
 static void RENDER_CallBack( GFX_CallBackFunctions_t function );
 
@@ -520,7 +521,7 @@ void RENDER_SetSize(Bitu width,Bitu height,Bitu bpp,float fps,double ratio,bool 
 		return;	
 	}
 	if ( ratio > 1 ) {
-		double target = height * ratio + 0.1;
+		double target = height * ratio + 0.025;
 		ratio = target / height;
 	} else {
 		//This would alter the width of the screen, we don't care about rounding errors here

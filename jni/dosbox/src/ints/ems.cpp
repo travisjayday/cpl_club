@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -951,7 +951,7 @@ static Bitu INT67_Handler(void) {
 				break;
 			case 0x0c: {	/* VCPI Switch from V86 to Protected Mode */
 				reg_flags&=(~FLAG_IF);
-				cpu.cpl=0;
+				CPU_SetCPL(0);
 
 				/* Read data from ESI (linear address) */
 				Bit32u new_cr3=mem_readd(reg_esi);
@@ -1365,7 +1365,7 @@ public:
 			emm_segmentmappings[i].handle=NULL_HANDLE;
 		}
 
-		EMM_AllocateSystemHandle(8);	// allocate OS-dedicated handle (ems handle zero, 128kb)
+		EMM_AllocateSystemHandle(24);	// allocate OS-dedicated handle (ems handle zero, 384kb)
 
 		if (ems_type==3) {
 			DMA_SetWrapping(0xffffffff);	// emm386-bug that disables dma wrapping
@@ -1411,7 +1411,7 @@ public:
 				CPU_Push32(SegValue(cs));
 				CPU_Push32(reg_eip&0xffff);
 				/* Switch to V86-mode */
-				cpu.cpl=0;
+				CPU_SetCPL(0);
 				CPU_IRET(true,0);
 			}
 		}
@@ -1451,7 +1451,7 @@ public:
 			CPU_SET_CRX(3, 0);
 			reg_flags&=(~(FLAG_IOPL|FLAG_VM));
 			CPU_LIDT(0x3ff, 0);
-			cpu.cpl=0;
+			CPU_SetCPL(0);
 		}
 	}
 };
@@ -1469,3 +1469,4 @@ void EMS_Init(Section* sec) {
 
 //Initialize static members
 Bit16u EMS::ems_baseseg = 0;
+

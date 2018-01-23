@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2012 Fishstix - Based upon GPL anDosBox and DosBox
+ *  Copyright (C) 2014 Fishstix - Based upon GPL anDosBox and DosBox
  *
  *  Copyright (C) 2011 Locnet (android.locnet@gmail.com)
  *  This program is free software; you can redistribute it and/or modify
@@ -21,58 +21,21 @@
 #include "dos/drives.h"
 #include "loader.h"
 
-
 #if 1
 
 Bitu CaptureState;
 
-/*void MSCDEX_SetCDInterface(int intNr, int forceCD) {}
-int  MSCDEX_AddDrive(char driveLetter, const char* physicalPath, Bit8u& subUnit){return 0;}
-bool MSCDEX_HasMediaChanged(Bit8u subUnit){return false;}
-bool MSCDEX_GetVolumeName(Bit8u subUnit, char* name){return false;}
-int  MSCDEX_RemoveDrive(char driveLetter){return 1;}
 
-isoDrive::isoDrive(char driveLetter, const char *fileName, Bit8u mediaid, int &error) {
-	nextFreeDirIterator = 0;
-	memset(dirIterators, 0, sizeof(dirIterators));
-	memset(sectorHashEntries, 0, sizeof(sectorHashEntries));
-	memset(&rootEntry, 0, sizeof(isoDirEntry));
-	
-	safe_strncpy(this->fileName, fileName, CROSS_LEN);
-
-	strcpy(info, "isoDrive ");
-	strcat(info, fileName);
-	this->driveLetter = driveLetter;
-	this->mediaid = mediaid;
-	char buffer[32] = { 0 };
-	strcpy(buffer, "Audio_CD");
-	Set_Label(buffer,discLabel,true);
-	
-	error = 2;
-}
-isoDrive::~isoDrive() {}
- bool isoDrive::FileOpen(DOS_File **file, char *name, Bit32u flags){return false;}
- bool isoDrive::FileCreate(DOS_File **file, char *name, Bit16u attributes){return false;}
- bool isoDrive::FileUnlink(char *name){return false;}
- bool isoDrive::RemoveDir(char *dir){return false;}
- bool isoDrive::MakeDir(char *dir){return false;}
- bool isoDrive::TestDir(char *dir){return false;}
- bool isoDrive::FindFirst(char *_dir, DOS_DTA &dta, bool fcb_findfirst){return false;}
- bool isoDrive::FindNext(DOS_DTA &dta){return false;}
- bool isoDrive::GetFileAttr(char *name, Bit16u *attr){return false;}
- bool isoDrive::Rename(char * oldname,char * newname){return false;}
- bool isoDrive::AllocationInfo(Bit16u *bytes_sector, Bit8u *sectors_cluster, Bit16u *total_clusters, Bit16u *free_clusters){return false;}
- bool isoDrive::FileExists(const char *name){return false;}
- bool isoDrive::FileStat(const char *name, FileStat_Block *const stat_block){return false;}
- Bit8u isoDrive::GetMediaByte(void){return mediaid;}
- bool isoDrive::isRemote(void){return true;}
- bool isoDrive::isRemovable(void){return true;}
-Bits isoDrive::UnMount(void) {return 0;}
-void isoDrive::Activate(void) {}*/
 
 #include "SDL.h"
 #include "SDL_thread.h"
 #include "mapper.h"
+#include <math.h>
+
+#include <android/log.h>
+#define  LOG_TAG    "DosBoxTurbo"
+#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__);
+
 
 struct SDL_mutex {
 	int recursive;
@@ -80,17 +43,16 @@ struct SDL_mutex {
 	SDL_sem *sem;
 };
 
-
 #define SDL_malloc	malloc
 #define SDL_free	free
 
 extern DECLSPEC SDL_mutex * SDLCALL SDL_CreateMutex(void) {
 	SDL_mutex *mutex;
 
-	/* Allocate mutex memory */
+
 	mutex = (SDL_mutex *)SDL_malloc(sizeof(*mutex));
 	if ( mutex ) {
-		/* Create the mutex semaphore, with initial value 1 */
+
 		mutex->sem = 0;
 		mutex->recursive = 0;
 		mutex->owner = 0;
@@ -154,6 +116,9 @@ extern DECLSPEC int	SDLCALL SDL_OpenAudio(SDL_AudioSpec *desired, SDL_AudioSpec 
 	return 0;
 }
 
+extern DECLSPEC void SDLCALL SDL_CloseAudio(void){
+	Android_CloseAudio();
+}
 
 extern DECLSPEC void SDLCALL SDL_Delay(Uint32 ms)
 {

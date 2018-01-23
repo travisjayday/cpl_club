@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -279,7 +279,7 @@ static void FPU_FADD(Bitu op1, Bitu op2){
 }
 
 static void FPU_FSIN(void){
-	fpu.regs[TOP].d = sinf(fpu.regs[TOP].d);
+	fpu.regs[TOP].d = sin(fpu.regs[TOP].d);
 	FPU_SET_C2(0);
 	//flags and such :)
 	return;
@@ -287,33 +287,33 @@ static void FPU_FSIN(void){
 
 static void FPU_FSINCOS(void){
 	Real64 temp = fpu.regs[TOP].d;
-	fpu.regs[TOP].d = sinf(temp);
-	FPU_PUSH(cosf(temp));
+	fpu.regs[TOP].d = sin(temp);
+	FPU_PUSH(cos(temp));
 	FPU_SET_C2(0);
 	//flags and such :)
 	return;
 }
 
 static void FPU_FCOS(void){
-	fpu.regs[TOP].d = cosf(fpu.regs[TOP].d);
+	fpu.regs[TOP].d = cos(fpu.regs[TOP].d);
 	FPU_SET_C2(0);
 	//flags and such :)
 	return;
 }
 
 static void FPU_FSQRT(void){
-	fpu.regs[TOP].d = sqrtf(fpu.regs[TOP].d);
+	fpu.regs[TOP].d = sqrt(fpu.regs[TOP].d);
 	//flags and such :)
 	return;
 }
 static void FPU_FPATAN(void){
-	fpu.regs[STV(1)].d = atan2f(fpu.regs[STV(1)].d,fpu.regs[TOP].d);
+	fpu.regs[STV(1)].d = atan2(fpu.regs[STV(1)].d,fpu.regs[TOP].d);
 	FPU_FPOP();
 	//flags and such :)
 	return;
 }
 static void FPU_FPTAN(void){
-	fpu.regs[TOP].d = tanf(fpu.regs[TOP].d);
+	fpu.regs[TOP].d = tan(fpu.regs[TOP].d);
 	FPU_PUSH(1.0);
 	FPU_SET_C2(0);
 	//flags and such :)
@@ -445,24 +445,24 @@ static void FPU_FXAM(void){
 
 
 static void FPU_F2XM1(void){
-	fpu.regs[TOP].d = powf(2.0,fpu.regs[TOP].d) - 1;
+	fpu.regs[TOP].d = pow(2.0,fpu.regs[TOP].d) - 1;
 	return;
 }
 
 static void FPU_FYL2X(void){
-	fpu.regs[STV(1)].d*=logf(fpu.regs[TOP].d)/logf(static_cast<Real64>(2.0));
+	fpu.regs[STV(1)].d*=log(fpu.regs[TOP].d)/log(static_cast<Real64>(2.0));
 	FPU_FPOP();
 	return;
 }
 
 static void FPU_FYL2XP1(void){
-	fpu.regs[STV(1)].d*=logf(fpu.regs[TOP].d+1.0)/logf(static_cast<Real64>(2.0));
+	fpu.regs[STV(1)].d*=log(fpu.regs[TOP].d+1.0)/log(static_cast<Real64>(2.0));
 	FPU_FPOP();
 	return;
 }
 
 static void FPU_FSCALE(void){
-	fpu.regs[TOP].d *= powf(2.0,static_cast<Real64>(static_cast<Bit64s>(fpu.regs[STV(1)].d)));
+	fpu.regs[TOP].d *= pow(2.0,static_cast<Real64>(static_cast<Bit64s>(fpu.regs[STV(1)].d)));
 	return; //2^x where x is chopped.
 }
 
@@ -525,7 +525,7 @@ static void FPU_FXTRACT(void) {
 	FPU_Reg test = fpu.regs[TOP];
 	Bit64s exp80 =  test.ll&LONGTYPE(0x7ff0000000000000);
 	Bit64s exp80final = (exp80>>52) - BIAS64;
-	Real64 mant = test.d / (powf(2.0,static_cast<Real64>(exp80final)));
+	Real64 mant = test.d / (pow(2.0,static_cast<Real64>(exp80final)));
 	fpu.regs[TOP].d = static_cast<Real64>(exp80final);
 	FPU_PUSH(mant);
 }

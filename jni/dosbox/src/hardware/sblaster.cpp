@@ -274,7 +274,7 @@ static INLINE void DSP_FlushData(void) {
 }
 
 static void DSP_DMA_CallBack(DmaChannel * chan, DMAEvent event) {
-	if (event==DMA_REACHED_TC) return;
+	if (chan!=sb.dma.chan || event==DMA_REACHED_TC) return;
 	else if (event==DMA_MASKED) {
 		if (sb.mode==MODE_DMA) {
 			GenerateDMASound(sb.dma.min);
@@ -429,6 +429,7 @@ static void GenerateDMASound(Bitu size) {
 			MixTemp[done++]=decode_ADPCM_3_sample((sb.dma.buf.b8[i] >> 2) & 0x7,sb.adpcm.reference,sb.adpcm.stepsize);
 			MixTemp[done++]=decode_ADPCM_3_sample((sb.dma.buf.b8[i] & 0x3) << 1,sb.adpcm.reference,sb.adpcm.stepsize);
 		}
+
 		sb.chan->AddSamples_m8(done,MixTemp);
 		break;
 	case DSP_DMA_4:
@@ -443,6 +444,7 @@ static void GenerateDMASound(Bitu size) {
 			MixTemp[done++]=decode_ADPCM_4_sample(sb.dma.buf.b8[i] >> 4,sb.adpcm.reference,sb.adpcm.stepsize);
 			MixTemp[done++]=decode_ADPCM_4_sample(sb.dma.buf.b8[i]& 0xf,sb.adpcm.reference,sb.adpcm.stepsize);
 		}
+
 		sb.chan->AddSamples_m8(done,MixTemp);
 		break;
 	case DSP_DMA_8:
@@ -713,7 +715,7 @@ static void DSP_Reset(void) {
 	sb.dma.remain_size=0;
 	if (sb.dma.chan) sb.dma.chan->Clear_Request();
 
-	sb.freq=22050;
+	sb.freq=16000;//22050;
 	sb.time_constant=45;
 	sb.dac.used=0;
 	sb.dac.last=0;
@@ -721,7 +723,7 @@ static void DSP_Reset(void) {
 	sb.e2.count=0;
 	sb.irq.pending_8bit=false;
 	sb.irq.pending_16bit=false;
-	sb.chan->SetFreq(22050);
+	sb.chan->SetFreq(16000);//22050
 //	DSP_SetSpeaker(false);
 	PIC_RemoveEvents(END_DMA_Event);
 }
@@ -756,6 +758,16 @@ static void DSP_ADC_CallBack(DmaChannel * /*chan*/, DMAEvent event) {
 	}
 	SB_RaiseIRQ(SB_IRQ_8);
 	ch->Register_Callback(0);
+}
+
+static void DSP_ChangeRate(Bitu freq) {
+	if (sb.freq!=freq && sb.dma.mode!=DSP_DMA_NONE) {
+		sb.chan->FillUp();
+		sb.chan->SetFreq(freq / (sb.mixer.stereo ? 2 : 1));
+		sb.dma.rate=(freq*sb.dma.mul) >> SB_SH;
+		sb.dma.min=(sb.dma.rate*3)/1000;
+	}
+	sb.freq=freq;
 }
 
 Bitu DEBUG_EnableDebugger(void);
@@ -845,16 +857,14 @@ static void DSP_DoCommand(void) {
 		if (sb.midi == true) MIDI_RawOutByte(sb.dsp.in.data[0]);
 		break;
 	case 0x40:	/* Set Timeconstant */
-		sb.freq=(1000000 / (256 - sb.dsp.in.data[0]));
-		/* Nasty kind of hack to allow runtime changing of frequency */
-		if (sb.dma.mode != DSP_DMA_NONE && sb.dma.autoinit) {
-			DSP_PrepareDMA_Old(sb.dma.mode,sb.dma.autoinit,sb.dma.sign);
-		}
+		DSP_ChangeRate(1000000 / (256 - sb.dsp.in.data[0]));
 		break;
 	case 0x41:	/* Set Output Samplerate */
-	case 0x42:	/* Set Input Samplerate */
 		DSP_SB16_ONLY;
-		sb.freq=(sb.dsp.in.data[0] << 8)  | sb.dsp.in.data[1];
+		DSP_ChangeRate((sb.dsp.in.data[0] << 8) | sb.dsp.in.data[1]);
+		break;
+	case 0x42:	/* Set Input Samplerate */
+		LOG(LOG_SB,LOG_ERROR)("DSP:Unimplemented input sample rate command");
 		break;
 	case 0x48:	/* Set DMA Block Size */
 		DSP_SB2_ABOVE;
@@ -984,7 +994,8 @@ static void DSP_DoCommand(void) {
 		DSP_AddData(sb.dsp.test_register);;
 		break;
 	case 0xf2:	/* Trigger 8bit IRQ */
-		SB_RaiseIRQ(SB_IRQ_8);
+		//Small delay in order to emulate the slowness of the DSP, fixes Llamatron 2012 and Lemmings 3D
+		PIC_AddEvent(&DSP_RaiseIRQEvent,0.01f); 
 		break;
 	case 0xf3:   /* Trigger 16bit IRQ */
 		DSP_SB16_ONLY; 
@@ -1091,6 +1102,7 @@ static Bit8u DSP_ReadData(void) {
 
 //The soundblaster manual says 2.0 Db steps but we'll go for a bit less
 #define CALCVOL(_VAL) (float)powf(10.0f,((float)(31-_VAL)*-1.3f)/20)
+
 static void CTMIXER_UpdateVolumes(void) {
 	if (!sb.mixer.enabled) return;
 	MixerChannel * chan;
@@ -1122,8 +1134,9 @@ static void CTMIXER_Reset(void) {
 	_WHICH_[0]=   ((((_VAL_) & 0xf0) >> 3)|(sb.type==SBT_16 ? 1:3));	\
 	_WHICH_[1]=   ((((_VAL_) & 0x0f) << 1)|(sb.type==SBT_16 ? 1:3));	\
 
-#define MAKEPROVOL(_WHICH_)			\
-	((((_WHICH_[0] & 0x1e) << 3) | ((_WHICH_[1] & 0x1e) >> 1)) & (sb.type==SBT_16 ? 0xff:0xee))
+#define MAKEPROVOL(_WHICH_)											\
+	((((_WHICH_[0] & 0x1e) << 3) | ((_WHICH_[1] & 0x1e) >> 1)) |	\
+		((sb.type==SBT_PRO1 || sb.type==SBT_PRO2) ? 0x11:0))
 
 static void DSP_ChangeStereo(bool stereo) {
 	if (!sb.dma.stereo && stereo) {
@@ -1583,7 +1596,7 @@ public:
 		}
 		if (sb.type==SBT_NONE || sb.type==SBT_GB) return;
 
-		sb.chan=MixerChan.Install(&SBLASTER_CallBack,22050,"SB");
+		sb.chan=MixerChan.Install(&SBLASTER_CallBack,16000,"SB");//22050
 		sb.dsp.state=DSP_S_NORMAL;
 		sb.dsp.out.lastval=0xaa;
 		sb.dma.chan=NULL;

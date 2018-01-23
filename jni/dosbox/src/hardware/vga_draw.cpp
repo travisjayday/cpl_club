@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@
 #include "../gui/render_scalers.h"
 #include "vga.h"
 #include "pic.h"
+#include "mem.h"
 
 //#undef C_DEBUG
 //#define C_DEBUG 1
@@ -79,38 +80,28 @@ static Bit8u * VGA_Draw_CGA16_Line(Bitu vidstart, Bitu line) {
 	const Bit8u *base = vga.tandy.draw_base + ((line & vga.tandy.line_mask) << vga.tandy.line_shift);
 #define CGA16_READER(OFF) (base[(vidstart +(OFF))& (8*1024 -1)])
 	Bit32u * draw=(Bit32u *)TempLine;
-	//Generate a temporary bitline to calculate the avarage
-	//over bit-2  bit-1  bit  bit+1.
-	//Combine this number with the current colour to get 
-	//an unique index in the pallette. Or it with bit 7 as they are stored
-	//in the upperpart to keep them from interfering the regular cga stuff
+	//There are 640 hdots in each line of the screen.
+	//The color of an even hdot always depends on only 4 bits of video RAM.
+	//The color of an odd hdot depends on 4 bits of video RAM in
+	//1-hdot-per-pixel modes and 6 bits of video RAM in 2-hdot-per-pixel
+	//modes. We always assume 6 and use duplicate palette entries in
+	//1-hdot-per-pixel modes so that we can use the same routine for all
+	//composite modes.
+  temp[1] = (CGA16_READER(0) >> 6) & 3;
+	for(Bitu x = 2; x < 640; x+=2) {
+		temp[x] = (temp[x-1] & 0xf);
+		temp[x+1] = (temp[x] << 2) | ((( CGA16_READER(x>>3)) >> (6-(x&6)) )&3);
+	}
+	temp[640] = temp[639] & 0xf;
+	temp[641] = temp[640] << 2;
+	temp[642] = temp[641] & 0xf;
 
-	for(Bitu x = 0; x < 640; x++)
-		temp[x+2] = (( CGA16_READER(x>>3)>> (7-(x&7)) )&1) << 4;
-		//shift 4 as that is for the index.
-	Bitu i = 0,temp1,temp2,temp3,temp4;
+	Bitu i = 2;
 	for (Bitu x=0;x<vga.draw.blocks;x++) {
-		Bitu val1 = CGA16_READER(x);
-		Bitu val2 = val1&0xf;
-		val1 >>= 4;
-
-		temp1 = temp[i] + temp[i+1] + temp[i+2] + temp[i+3]; i++;
-		temp2 = temp[i] + temp[i+1] + temp[i+2] + temp[i+3]; i++;
-		temp3 = temp[i] + temp[i+1] + temp[i+2] + temp[i+3]; i++;
-		temp4 = temp[i] + temp[i+1] + temp[i+2] + temp[i+3]; i++;
-
-		*draw++ = 0x80808080|(temp1|val1) |
-		          ((temp2|val1) << 8) |
-		          ((temp3|val1) <<16) |
-		          ((temp4|val1) <<24);
-		temp1 = temp[i] + temp[i+1] + temp[i+2] + temp[i+3]; i++;
-		temp2 = temp[i] + temp[i+1] + temp[i+2] + temp[i+3]; i++;
-		temp3 = temp[i] + temp[i+1] + temp[i+2] + temp[i+3]; i++;
-		temp4 = temp[i] + temp[i+1] + temp[i+2] + temp[i+3]; i++;
-		*draw++ = 0x80808080|(temp1|val2) |
-		          ((temp2|val2) << 8) |
-		          ((temp3|val2) <<16) |
-		          ((temp4|val2) <<24);
+		*draw++ = 0xc0708030 | temp[i] | (temp[i+1] << 8) | (temp[i+2] << 16) | (temp[i+3] << 24);
+		i += 4;
+		*draw++ = 0xc0708030 | temp[i] | (temp[i+1] << 8) | (temp[i+2] << 16) | (temp[i+3] << 24);
+		i += 4;
 	}
 	return TempLine;
 #undef CGA16_READER
@@ -155,12 +146,21 @@ static Bit8u * VGA_Draw_Changes_Line(Bitu vidstart, Bitu line) {
 	for (; start <= end;start++) {
 		if ( map[start] & checkMask ) {
 			Bitu offset = vidstart & vga.draw.linear_mask;
-			if (vga.draw.linear_mask-offset < vga.draw.line_length)
+			if(vga.draw.linear_mask-offset < vga.draw.line_length)
+#ifdef NEON_MEMORY
+				memcpy_neon_UNAL(vga.draw.linear_base+vga.draw.linear_mask+1, vga.draw.linear_base, vga.draw.line_length);
+#else
 				memcpy(vga.draw.linear_base+vga.draw.linear_mask+1, vga.draw.linear_base, vga.draw.line_length);
+#endif
 			Bit8u *ret = &vga.draw.linear_base[ offset ];
 #if !defined(C_UNALIGNED_MEMORY)
 			if (GCC_UNLIKELY( ((Bitu)ret) & (sizeof(Bitu)-1)) ) {
+#ifdef NEON_MEMORY
+				memcpy_neon_UNAL( TempLine, ret, vga.draw.line_length );
+#else
 				memcpy( TempLine, ret, vga.draw.line_length );
+#endif
+
 				return TempLine;
 			}
 #endif
@@ -190,16 +190,27 @@ static Bit8u * VGA_Draw_Linear_Line(Bitu vidstart, Bitu /*line*/) {
 		Bitu unwrapped_len = vga.draw.line_length-wrapped_len;
 		
 		// unwrapped chunk: to top of memory block
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(TempLine, &vga.draw.linear_base[offset], unwrapped_len);
+#else
 		memcpy(TempLine, &vga.draw.linear_base[offset], unwrapped_len);
+#endif
 		// wrapped chunk: from base of memory block
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&TempLine[unwrapped_len], vga.draw.linear_base, wrapped_len);
+#else
 		memcpy(&TempLine[unwrapped_len], vga.draw.linear_base, wrapped_len);
-
+#endif
 		ret = TempLine;
 	}
 
 #if !defined(C_UNALIGNED_MEMORY)
 	if (GCC_UNLIKELY( ((Bitu)ret) & (sizeof(Bitu)-1)) ) {
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL( TempLine, ret, vga.draw.line_length );
+#else
 		memcpy( TempLine, ret, vga.draw.line_length );
+#endif
 		return TempLine;
 	}
 #endif
@@ -242,7 +253,11 @@ static Bit8u * VGA_Draw_VGA_Line_HWMouse( Bitu vidstart, Bitu /*line*/) {
 		// This is used when the mouse cursor partially leaves the screen.
 		// It is arranged as bitmap of 16bits of bitA followed by 16bits of bitB, each
 		// AB bits corresponding to a cursor pixel. The whole map is 8kB in size.
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(TempLine, &vga.mem.linear[ vidstart ], vga.draw.width);
+#else
 		memcpy(TempLine, &vga.mem.linear[ vidstart ], vga.draw.width);
+#endif
 		// the index of the bit inside the cursor bitmap we start at:
 		Bitu sourceStartBit = ((lineat - vga.s3.hgc.originy) + vga.s3.hgc.posy)*64 + vga.s3.hgc.posx; 
 		// convert to video memory addr and bit index
@@ -286,7 +301,12 @@ static Bit8u * VGA_Draw_LIN16_Line_HWMouse(Bitu vidstart, Bitu /*line*/) {
 		(lineat > (vga.s3.hgc.originy + (63U-vga.s3.hgc.posy))) ) {
 		return &vga.mem.linear[vidstart];
 	} else {
+
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(TempLine, &vga.mem.linear[ vidstart ], vga.draw.width*2);
+#else
 		memcpy(TempLine, &vga.mem.linear[ vidstart ], vga.draw.width*2);
+#endif
 		Bitu sourceStartBit = ((lineat - vga.s3.hgc.originy) + vga.s3.hgc.posy)*64 + vga.s3.hgc.posx; 
  		Bitu cursorMemStart = ((sourceStartBit >> 2)& ~1) + (((Bit32u)vga.s3.hgc.startaddr) << 10);
 		Bitu cursorStartBit = sourceStartBit & 0x7;
@@ -328,7 +348,12 @@ static Bit8u * VGA_Draw_LIN32_Line_HWMouse(Bitu vidstart, Bitu /*line*/) {
 		(lineat > (vga.s3.hgc.originy + (63U-vga.s3.hgc.posy))) ) {
 		return &vga.mem.linear[ vidstart ];
 	} else {
+
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(TempLine, &vga.mem.linear[ vidstart ], vga.draw.width*4);
+#else
 		memcpy(TempLine, &vga.mem.linear[ vidstart ], vga.draw.width*4);
+#endif
 		Bitu sourceStartBit = ((lineat - vga.s3.hgc.originy) + vga.s3.hgc.posy)*64 + vga.s3.hgc.posx; 
 		Bitu cursorMemStart = ((sourceStartBit >> 2)& ~1) + (((Bit32u)vga.s3.hgc.startaddr) << 10);
 		Bitu cursorStartBit = sourceStartBit & 0x7;
@@ -363,8 +388,15 @@ static const Bit8u* VGA_Text_Memwrap(Bitu vidstart) {
 		// wrapping in this line
 		Bitu break_pos = (vga.draw.linear_mask - vidstart) + 1;
 		// need a temporary storage - TempLine/2 is ok for a bit more than 132 columns
+
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(&TempLine[sizeof(TempLine)/2], &vga.tandy.draw_base[vidstart], break_pos);
+		memcpy_neon_UNAL(&TempLine[sizeof(TempLine)/2 + break_pos],&vga.tandy.draw_base[0], line_end - break_pos);
+#else
 		memcpy(&TempLine[sizeof(TempLine)/2], &vga.tandy.draw_base[vidstart], break_pos);
 		memcpy(&TempLine[sizeof(TempLine)/2 + break_pos],&vga.tandy.draw_base[0], line_end - break_pos);
+#endif
+
 		return &TempLine[sizeof(TempLine)/2];
 	} else return &vga.tandy.draw_base[vidstart];
 }
@@ -803,15 +835,11 @@ static void INLINE VGA_ChangesStart( void ) {
 }
 #endif
 
-//extern	bool	enableRefreshHack;	//locnet, refresh hack, see vga_misc..cpp
-
 static void VGA_VertInterrupt(Bitu /*val*/) {
 	if ((!vga.draw.vret_triggered) && ((vga.crtc.vertical_retrace_end&0x30)==0x10)) {
 		vga.draw.vret_triggered=true;
 		if (GCC_UNLIKELY(machine==MCH_EGA)) PIC_ActivateIRQ(9);
 	}
-	if (enableRefreshHack)
-		vga.config.retrace=true;	//locnet, refresh hack, see vga_misc.cpp
 }
 
 static void VGA_Other_VertInterrupt(Bitu val) {
@@ -829,8 +857,6 @@ static void VGA_PanningLatch(Bitu /*val*/) {
 }
 
 static void VGA_VerticalTimer(Bitu /*val*/) {
-	if (enableRefreshHack)
-		vga.config.retrace=false;	//locnet, refresh hack, see vga_misc.cpp
 	vga.draw.delay.framestart = PIC_FullIndex();
 	PIC_AddEvent( VGA_VerticalTimer, (float)vga.draw.delay.vtotal );
 	
@@ -942,7 +968,6 @@ static void VGA_VerticalTimer(Bitu /*val*/) {
 			|| !vga.draw.blinking) ? true:false;
 		break;
 	case M_HERC_GFX:
-		break;
 	case M_CGA4:case M_CGA2:
 		vga.draw.address=(vga.draw.address*2)&0x1fff;
 		break;
@@ -1282,6 +1307,29 @@ void VGA_SetupDrawing(Bitu /*val*/) {
 	}
 	// Display end
 	vga.draw.delay.vdend = vdend * vga.draw.delay.htotal;
+
+	// EGA frequency dependent monitor palette
+	if (machine == MCH_EGA) {
+		if (vga.misc_output & 1) {
+			// EGA card is in color mode
+			if ((1.0f/vga.draw.delay.htotal) > 19.0f) {
+				// 64 color EGA mode
+				VGA_ATTR_SetEGAMonitorPalette(EGA);
+			} else {
+				// 16 color CGA mode compatibility
+				VGA_ATTR_SetEGAMonitorPalette(CGA);
+			}
+		} else {
+			// EGA card in monochrome mode
+			// It is not meant to be autodetected that way, you either
+			// have a monochrome or color monitor connected and
+			// the EGA switches configured appropriately.
+			// But this would only be a problem if a program sets 
+			// the adapter to monochrome mode and still expects color output.
+			// Such a program should be shot to the moon...
+			VGA_ATTR_SetEGAMonitorPalette(MONO);
+		}
+	}
 
 	vga.draw.parts_total=VGA_PARTS;
 	/*

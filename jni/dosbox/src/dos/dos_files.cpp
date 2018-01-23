@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -66,6 +66,7 @@ bool DOS_MakeName(char const * const name,char * const fullname,Bit8u * drive) {
 	char tempdir[DOS_PATHLENGTH];
 	char upname[DOS_PATHLENGTH];
 	Bitu r,w;
+	Bit8u c;
 	*drive = DOS_GetDefaultDrive();
 	/* First get the drive */
 	if (name_int[1]==':') {
@@ -78,29 +79,13 @@ bool DOS_MakeName(char const * const name,char * const fullname,Bit8u * drive) {
 	}
 	r=0;w=0;
 	while (name_int[r]!=0 && (r<DOS_PATHLENGTH)) {
-		Bit8u c=name_int[r++];
-		if ((c>='a') && (c<='z')) {upname[w++]=c-32;continue;}
-		if ((c>='A') && (c<='Z')) {upname[w++]=c;continue;}
-		if ((c>='0') && (c<='9')) {upname[w++]=c;continue;}
-		switch (c) {
-		case '/':
-			upname[w++]='\\';
-			break;
-		case ' ': /* should be seperator */
-			break;
-		case '\\':	case '$':	case '#':	case '@':	case '(':	case ')':
-		case '!':	case '%':	case '{':	case '}':	case '`':	case '~':
-		case '_':	case '-':	case '.':	case '*':	case '?':	case '&':
-		case '\'':	case '+':	case '^':	case 246:	case 255:	case 0xa0:
-		case 0xe5:	case 0xbd:	case 0x9d:
-			upname[w++]=c;
-			break;
-		default:
-			LOG(LOG_FILES,LOG_NORMAL)("Makename encountered an illegal char %c hex:%X in %s!",c,c,name);
-			DOS_SetError(DOSERR_PATH_NOT_FOUND);return false;
-			break;
-		}
+		c=name_int[r++];
+		if ((c>='a') && (c<='z')) c-=32;
+		else if (c==' ') continue; /* should be separator */
+		else if (c=='/') c='\\';
+		upname[w++]=c;
 	}
+	while (r>0 && name_int[r-1]==' ') r--;
 	if (r>=DOS_PATHLENGTH) { DOS_SetError(DOSERR_PATH_NOT_FOUND);return false; }
 	upname[w]=0;
 	/* Now parse the new file name to make the final filename */
@@ -174,6 +159,24 @@ bool DOS_MakeName(char const * const name,char * const fullname,Bit8u * drive) {
 				ext[4] = 0;
 				if((strlen(tempdir) - strlen(ext)) > 8) memmove(tempdir + 8, ext, 5);
 			} else tempdir[8]=0;
+
+			for (Bitu i=0;i<strlen(tempdir);i++) {
+				c=tempdir[i];
+				if ((c>='A') && (c<='Z')) continue;
+				if ((c>='0') && (c<='9')) continue;
+				switch (c) {
+				case '$':	case '#':	case '@':	case '(':	case ')':
+				case '!':	case '%':	case '{':	case '}':	case '`':	case '~':
+				case '_':	case '-':	case '.':	case '*':	case '?':	case '&':
+				case '\'':	case '+':	case '^':	case 246:	case 255:	case 0xa0:
+				case 0xe5:	case 0xbd:	case 0x9d:
+					break;
+				default:
+					LOG(LOG_FILES,LOG_NORMAL)("Makename encountered an illegal char %c hex:%X in %s!",c,c,name);
+					DOS_SetError(DOSERR_PATH_NOT_FOUND);return false;
+					break;
+				}
+			}
 
 			if (strlen(fullname)+strlen(tempdir)>=DOS_PATHLENGTH) {
 				DOS_SetError(DOSERR_PATH_NOT_FOUND);return false;
@@ -515,14 +518,11 @@ bool DOS_CreateFile(char const * name,Bit16u attributes,Bit16u * entry) {
 	}
 }
 
-//extern char absoluteDName[40];
-
 bool DOS_OpenFile(char const * name,Bit8u flags,Bit16u * entry) {
 	/* First check for devices */
 	if (flags>2) LOG(LOG_FILES,LOG_ERROR)("Special file open command %X file %s",flags,name);
 	else LOG(LOG_FILES,LOG_NORMAL)("file open command %X file %s",flags,name);
 
-	//strcpy(absoluteDName,name);
 	DOS_PSP psp(dos.psp());
 	Bit16u attr = 0;
 	Bit8u devnum = DOS_FindDevice(name);
@@ -1232,7 +1232,10 @@ bool DOS_FileExists(char const * const name) {
 bool DOS_GetAllocationInfo(Bit8u drive,Bit16u * _bytes_sector,Bit8u * _sectors_cluster,Bit16u * _total_clusters) {
 	if (!drive) drive =  DOS_GetDefaultDrive();
 	else drive--;
-	if (drive >= DOS_DRIVES || !Drives[drive]) return false;
+	if (drive >= DOS_DRIVES || !Drives[drive]) {
+		DOS_SetError(DOSERR_INVALID_DRIVE);
+		return false;
+	}
 	Bit16u _free_clusters;
 	Drives[drive]->AllocationInfo(_bytes_sector,_sectors_cluster,_total_clusters,&_free_clusters);
 	SegSet16(ds,RealSeg(dos.tables.mediaid));

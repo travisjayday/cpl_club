@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -49,6 +49,11 @@ typedef struct SMSF {
 	unsigned char fr;
 } TMSF;
 
+typedef struct SCtrl {
+	Bit8u	out[4];			// output channel
+	Bit8u	vol[4];			// channel volume
+} TCtrl;
+
 extern int CDROM_GetMountType(char* path, int force);
 
 class CDROM_Interface
@@ -70,8 +75,11 @@ public:
 	virtual bool	PlayAudioSector		(unsigned long start,unsigned long len) = 0;
 	virtual bool	PauseAudio			(bool resume) = 0;
 	virtual bool	StopAudio			(void) = 0;
+	virtual void	ChannelControl		(TCtrl ctrl) = 0;
 	
 	virtual bool	ReadSectors			(PhysPt buffer, bool raw, unsigned long sector, unsigned long num) = 0;
+	/* This is needed for IDE hack, who's buffer does not exist in DOS physical memory */
+	virtual bool	ReadSectorsHost			(void* buffer, bool raw, unsigned long sector, unsigned long num) = 0;
 
 	virtual bool	LoadUnloadMedia		(bool unload) = 0;
 	
@@ -94,7 +102,11 @@ public:
 	virtual bool	PlayAudioSector		(unsigned long start,unsigned long len);
 	virtual bool	PauseAudio			(bool resume);
 	virtual bool	StopAudio			(void);
+	virtual void	ChannelControl		(TCtrl ctrl) { return; };
 	virtual bool	ReadSectors			(PhysPt /*buffer*/, bool /*raw*/, unsigned long /*sector*/, unsigned long /*num*/) { return false; };
+	/* This is needed for IDE hack, who's buffer does not exist in DOS physical memory */
+	virtual bool	ReadSectorsHost			(void* buffer, bool raw, unsigned long sector, unsigned long num);
+
 	virtual bool	LoadUnloadMedia		(bool unload);
 
 private:
@@ -119,7 +131,11 @@ public:
 	bool	PlayAudioSector		(unsigned long /*start*/,unsigned long /*len*/) { return true; };
 	bool	PauseAudio			(bool /*resume*/) { return true; };
 	bool	StopAudio			(void) { return true; };
+	void	ChannelControl		(TCtrl ctrl) { return; };
 	bool	ReadSectors			(PhysPt /*buffer*/, bool /*raw*/, unsigned long /*sector*/, unsigned long /*num*/) { return true; };
+	/* This is needed for IDE hack, who's buffer does not exist in DOS physical memory */
+	bool	ReadSectorsHost			(void* buffer, bool raw, unsigned long sector, unsigned long num);
+
 	bool	LoadUnloadMedia		(bool /*unload*/) { return true; };
 };	
 
@@ -184,7 +200,10 @@ public:
 	bool	PlayAudioSector		(unsigned long start,unsigned long len);
 	bool	PauseAudio		(bool resume);
 	bool	StopAudio		(void);
+	void	ChannelControl		(TCtrl ctrl);
 	bool	ReadSectors		(PhysPt buffer, bool raw, unsigned long sector, unsigned long num);
+	/* This is needed for IDE hack, who's buffer does not exist in DOS physical memory */
+	bool	ReadSectorsHost			(void* buffer, bool raw, unsigned long sector, unsigned long num);
 	bool	LoadUnloadMedia		(bool unload);
 	bool	ReadSector		(Bit8u *buffer, bool raw, unsigned long sector);
 	bool	HasDataTrack		(void);
@@ -206,6 +225,8 @@ static  struct imagePlayer {
 		int     targetFrame;
 		bool    isPlaying;
 		bool    isPaused;
+		bool    ctrlUsed;
+		TCtrl   ctrlData;
 	} player;
 	
 	void 	ClearTracks();
@@ -252,9 +273,12 @@ public:
 	bool	PlayAudioSector		(unsigned long start,unsigned long len);
 	bool	PauseAudio			(bool resume);
 	bool	StopAudio			(void);
+	void	ChannelControl		(TCtrl ctrl) { return; };
 	
 	bool	ReadSectors			(PhysPt buffer, bool raw, unsigned long sector, unsigned long num);
-
+	/* This is needed for IDE hack, who's buffer does not exist in DOS physical memory */
+	bool	ReadSectorsHost			(void* buffer, bool raw, unsigned long sector, unsigned long num);
+	
 	bool	LoadUnloadMedia		(bool unload);
 	
 private:
@@ -302,10 +326,13 @@ public:
 	bool	PlayAudioSector		(unsigned long start,unsigned long len);
 	bool	PauseAudio			(bool resume);
 	bool	StopAudio			(void);
+	void	ChannelControl		(TCtrl ctrl);
 	
 	bool	ReadSector			(Bit8u *buffer, bool raw, unsigned long sector);
 	bool	ReadSectors			(PhysPt buffer, bool raw, unsigned long sector, unsigned long num);
-
+	/* This is needed for IDE hack, who's buffer does not exist in DOS physical memory */
+	bool	ReadSectorsHost			(void* buffer, bool raw, unsigned long sector, unsigned long num);
+	
 	bool	LoadUnloadMedia		(bool unload);
 
 	void	InitNewMedia		(void) { Close(); Open(); };
@@ -356,6 +383,8 @@ private:
 		int     targetFrame;
 		bool    isPlaying;
 		bool    isPaused;
+		bool    ctrlUsed;
+		TCtrl   ctrlData;
 	} player;
 
 };
@@ -372,6 +401,8 @@ public:
 	bool	SetDevice		(char* path, int forceCD);
 	bool	GetUPC			(unsigned char& attr, char* upc);
 	bool	ReadSectors		(PhysPt buffer, bool raw, unsigned long sector, unsigned long num);
+	/* This is needed for IDE hack, who's buffer does not exist in DOS physical memory */
+	bool	ReadSectorsHost			(void* buffer, bool raw, unsigned long sector, unsigned long num);
 
 private:
 	char	device_name[512];

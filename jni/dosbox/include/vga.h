@@ -1,5 +1,5 @@
  /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -58,6 +58,7 @@ enum VGAModes {
 #define S3_XGA_640		0x40
 #define S3_XGA_800		0x80
 #define S3_XGA_1280		0xc0
+#define S3_XGA_1600		0x81
 #define S3_XGA_WMASK	(S3_XGA_640|S3_XGA_800|S3_XGA_1024|S3_XGA_1152|S3_XGA_1280)
 
 #define S3_XGA_8BPP  0x00
@@ -426,6 +427,10 @@ void VGA_ChangedBank(void);
 void VGA_DAC_CombineColor(Bit8u attr,Bit8u pal);
 void VGA_DAC_SetEntry(Bitu entry,Bit8u red,Bit8u green,Bit8u blue);
 void VGA_ATTR_SetPalette(Bit8u index,Bit8u val);
+
+typedef enum {CGA, EGA, MONO} EGAMonitorMode;
+
+void VGA_ATTR_SetEGAMonitorPalette(EGAMonitorMode m);
 
 /* The VGA Subfunction startups */
 void VGA_SetupAttr(void);

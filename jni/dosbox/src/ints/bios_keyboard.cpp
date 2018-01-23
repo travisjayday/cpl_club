@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -514,7 +514,7 @@ static Bitu INT16_Handler(void) {
 		break;
 	case 0x01: /* CHECK FOR KEYSTROKE */
 		// enable interrupt-flag after IRET of this int16
-		mem_writew(SegPhys(ss)+reg_sp+4,(mem_readw(SegPhys(ss)+reg_sp+4) | FLAG_IF));
+		CALLBACK_SIF(true);
 		for (;;) {
 			if (check_key(temp)) {
 				if (!IsEnhancedKey(temp)) {
@@ -535,6 +535,8 @@ static Bitu INT16_Handler(void) {
 		}
 		break;
 	case 0x11: /* CHECK FOR KEYSTROKE (enhanced keyboards only) */
+		// enable interrupt-flag after IRET of this int16
+		CALLBACK_SIF(true);
 		if (!check_key(temp)) {
 			CALLBACK_SZF(true);
 		} else {
@@ -595,9 +597,14 @@ static void InitBiosSegment(void) {
 	mem_writew(BIOS_KEYBOARD_BUFFER_TAIL,0x1e);
 	Bit8u flag1 = 0;
 	Bit8u leds = 16; /* Ack received */
-//MAPPER_Init takes care of this now ?
-//	if(startup_state_capslock) { flag1|=0x40; leds|=0x04;}
-//	if(startup_state_numlock){ flag1|=0x20; leds|=0x02;}
+
+#if SDL_VERSION_ATLEAST(1, 2, 14)
+//Nothing, mapper handles all.
+#else
+	if (startup_state_capslock) { flag1|=0x40; leds|=0x04;}
+	if (startup_state_numlock)  { flag1|=0x20; leds|=0x02;}
+#endif
+
 	mem_writeb(BIOS_KEYBOARD_FLAGS1,flag1);
 	mem_writeb(BIOS_KEYBOARD_FLAGS2,0);
 	mem_writeb(BIOS_KEYBOARD_FLAGS3,16); /* Enhanced keyboard installed */	

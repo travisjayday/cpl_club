@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -48,8 +48,8 @@ using namespace std;
 
 Bit8u adlib_commandreg;
 static MixerChannel * gus_chan;
-static Bit8u irqtable[8] = { 0, 2, 5, 3, 7, 11, 12, 15 };
-static Bit8u dmatable[8] = { 0, 1, 3, 5, 6, 7, 0, 0 };
+static Bit8u const irqtable[8] = { 0, 2, 5, 3, 7, 11, 12, 15 };
+static Bit8u const dmatable[8] = { 0, 1, 3, 5, 6, 7, 0, 0 };
 static Bit8u GUSRam[1024*1024]; // 1024K of GUS Ram
 static Bit32s AutoAmp = 512;
 static Bit16u vol16bit[4096];
@@ -771,7 +771,11 @@ static void MakeTables(void) {
 	}
 	pantable[0] = 4095 << RAMP_FRACT;
 	for (i=1;i<16;i++) {
+#ifdef MATH_NEON
+		pantable[i]=(Bit32u)(-128.0*(logf_neon((double)i/15.0)/logf_neon(2.0))*(double)(1 << RAMP_FRACT));
+#else
 		pantable[i]=(Bit32u)(-128.0*(logf((double)i/15.0)/logf(2.0))*(double)(1 << RAMP_FRACT));
+#endif
 	}
 }
 

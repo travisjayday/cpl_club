@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -256,7 +256,7 @@ run_block:
 		case BR_Cycles:
 			// cycles went negative, return from the core to handle
 			// external events, schedule the pic...
-#if C_HEAVY_DEBUG
+#if C_HEAVY_DEBUG			
 			if (DEBUG_HeavyIsBreakpoint()) return debugCallback;
 #endif
 			return CBRET_NONE;

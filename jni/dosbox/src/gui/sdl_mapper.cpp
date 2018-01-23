@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -1583,6 +1583,9 @@ public:
 		case MK_printscreen:
 			key=SDLK_PRINT;
 			break;
+		case MK_home: 
+			key=SDLK_HOME; 
+			break;
 		}
 		sprintf(buf,"%s \"key %d%s%s%s\"",
 			entry,
@@ -2358,17 +2361,21 @@ void MAPPER_Init(void) {
 	if (!MAPPER_LoadBinds()) CreateDefaultBinds();
 	if (SDL_GetModState()&KMOD_CAPS) {
 		for (CBindList_it bit=caps_lock_event->bindlist.begin();bit!=caps_lock_event->bindlist.end();bit++) {
-			(*bit)->ActivateBind(32767,true,true);
 #if SDL_VERSION_ATLEAST(1, 2, 14)
+			(*bit)->ActivateBind(32767,true,false);
 			(*bit)->DeActivateBind(false);
+#else
+			(*bit)->ActivateBind(32767,true,true); //Skip the action itself as bios_keyboard.cpp handles the startup state.
 #endif
 		}
 	}
 	if (SDL_GetModState()&KMOD_NUM) {
 		for (CBindList_it bit=num_lock_event->bindlist.begin();bit!=num_lock_event->bindlist.end();bit++) {
-			(*bit)->ActivateBind(32767,true,true);
 #if SDL_VERSION_ATLEAST(1, 2, 14)
+			(*bit)->ActivateBind(32767,true,false);
 			(*bit)->DeActivateBind(false);
+#else
+			(*bit)->ActivateBind(32767,true,true);
 #endif
 		}
 	}

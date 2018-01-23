@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -542,7 +542,7 @@ private:
 class DOS_MCB : public MemStruct{
 public:
 	DOS_MCB(Bit16u seg) { SetPt(seg); }
-	void SetFileName(char const * const _name) { MEM_BlockWrite(pt+offsetof(sMCB,filename),_name,8); }
+	void SetFileName(const char * const _name) { MEM_BlockWrite(pt+offsetof(sMCB,filename),_name,8); }
 	void GetFileName(char * const _name) { MEM_BlockRead(pt+offsetof(sMCB,filename),_name,8);_name[8]=0;}
 	void SetType(Bit8u _type) { sSave(sMCB,type,_type);}
 	void SetSize(Bit16u _size) { sSave(sMCB,size,_size);}
@@ -638,7 +638,7 @@ struct DOS_Block {
 
 extern DOS_Block dos;
 
-static Bit8u RealHandle(Bit16u handle) {
+static INLINE Bit8u RealHandle(Bit16u handle) {
 	DOS_PSP psp(dos.psp());	
 	return psp.GetFileHandle(handle);
 }

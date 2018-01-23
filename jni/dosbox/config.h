@@ -46,17 +46,17 @@
 #define C_DIRECTSERIAL 0
 
 /* Define to 1 to use x86 dynamic cpu core */
-/* #define C_DYNAMIC_X86 1 */
+ #define C_DYNAMIC_X86 1
 
 /* Define to 1 to use recompiling cpu core. Can not be used together with the
    dynamic-x86 core */
-/* #define C_DYNREC 1 */
+/*#define C_DYNREC 1*/
 
 /* Define to 1 to enable floating point emulation */
-/* #define C_FPU 1 */
+#define C_FPU 1
 
 /* Define to 1 to use a x86 assembly fpu core */
-/* #define C_FPU_X86 1 */
+ #define C_FPU_X86 1
 
 /* Determines if the compilers supports attributes for structures. */
 #define C_HAS_ATTRIBUTE 1
@@ -74,16 +74,23 @@
 
 /* Define to 1 to enable IPX over Internet networking, requires SDL_net */
 /* #undef C_IPX */
-#define C_IPX 1
 
-/* Define to 1 to enable internal modem support, requires SDL_net */
-/* #undef C_MODEM */
+// Uncomment if your Android device supports NEON
+/* Enable NEON Performance Optimizations */
+/* #define HAVE_NEON 1 */
+
+// Uncomment if your Android device supports NEON
+/* Enable NEON Memory Optimizations */
+/* #define NEON_MEMORY 1 */
 
 /* Define to 1 to use opengl display output support */
 #define C_OPENGL 0
 
 /* Define to 1 to enable SDL_sound support */
-/* #undef C_SDL_SOUND */
+/* #define C_SDL_SOUND 1 */
+
+/* Define to 1 to enable MT_32 support */
+/* #define MT32_EMU 1 */
 
 /* Define to 1 if you have setpriority support */
 #define C_SET_PRIORITY 1
@@ -93,6 +100,7 @@
 
 /* The type of cpu this target has */
 /* #define C_TARGETCPU ARMV4LE */
+#define C_TARGETCPU X86
 
 /* Define to 1 to use a unaligned memory access */
 /* #define C_UNALIGNED_MEMORY 1 */
@@ -337,6 +345,8 @@ class localDrive;
 class fatDrive;
 class DOS_File;
 class localFile;
+class Section;
+class Property;
 
 bool dynamic_check(localFile *u);
 bool dynamic_check(localDrive *u);
@@ -351,6 +361,18 @@ T my_dynamic_cast(DOS_Drive *u) {
 }
 
 template<class T>
+T my_dynamic_cast(Section *u) {
+	return static_cast<T>(u);
+}
+
+template<class T>
+T my_dynamic_cast(Property *u) {
+	return static_cast<T>(u);
+}
+
+
+
+template<class T>
 T my_dynamic_cast(DOS_File *u) {
 	if (dynamic_check(static_cast<T>(u)))
 		return static_cast<T>(u);
@@ -360,7 +382,3 @@ T my_dynamic_cast(DOS_File *u) {
 
 #endif
 
-//Bitu abs(Bitu x);
-//#define __kernel_time_t unsigned long
-
-//#define DEBUG 1

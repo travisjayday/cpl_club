@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 #include "shell.h"
 #include "callback.h"
 #include "regs.h"
+#include "bios.h"
 #include "../dos/drives.h"
 #include "support.h"
 #include "control.h"
@@ -302,13 +303,25 @@ void DOS_Shell::CMD_EXIT(char * args) {
 void DOS_Shell::CMD_CHDIR(char * args) {
 	HELP("CHDIR");
 	StripSpaces(args);
+	Bit8u drive = DOS_GetDefaultDrive()+'A';
+	char dir[DOS_PATHLENGTH];
 	if (!*args) {
-		Bit8u drive=DOS_GetDefaultDrive()+'A';
-		char dir[DOS_PATHLENGTH];
 		DOS_GetCurrentDir(0,dir);
 		WriteOut("%c:\\%s\n",drive,dir);
 	} else if(strlen(args) == 2 && args[1]==':') {
-		WriteOut(MSG_Get("SHELL_CMD_CHDIR_HINT"),toupper(*reinterpret_cast<unsigned char*>(&args[0])));
+		Bit8u targetdrive = (args[0] | 0x20)-'a' + 1;
+		unsigned char targetdisplay = *reinterpret_cast<unsigned char*>(&args[0]);
+		if(!DOS_GetCurrentDir(targetdrive,dir)) {
+			if(drive == 'Z') {
+				WriteOut(MSG_Get("SHELL_EXECUTE_DRIVE_NOT_FOUND"),toupper(targetdisplay));
+			} else {
+				WriteOut(MSG_Get("SHELL_ILLEGAL_PATH"));
+			}
+			return;
+		}
+		WriteOut("%c:\\%s\n",toupper(targetdisplay),dir);
+		if(drive == 'Z')
+			WriteOut(MSG_Get("SHELL_CMD_CHDIR_HINT"),toupper(targetdisplay));
 	} else 	if (!DOS_ChangeDir(args)) {
 		/* Changedir failed. Check if the filename is longer then 8 and/or contains spaces */
 	   
@@ -333,8 +346,7 @@ void DOS_Shell::CMD_CHDIR(char * args) {
 			temps += "~1";
 			WriteOut(MSG_Get("SHELL_CMD_CHDIR_HINT_2"),temps.insert(0,slashpart).c_str());
 		} else {
-			Bit8u drive=DOS_GetDefaultDrive()+'A';
-			if (drive=='Z') {
+			if (drive == 'Z') {
 				WriteOut(MSG_Get("SHELL_CMD_CHDIR_HINT_3"));
 			} else {
 				WriteOut(MSG_Get("SHELL_CMD_CHDIR_ERROR"),args);
@@ -369,8 +381,8 @@ void DOS_Shell::CMD_RMDIR(char * args) {
 	}
 }
 
-static void FormatNumber(Bitu num,char * buf) {
-	Bitu numm,numk,numb,numg;
+static void FormatNumber(Bit32u num,char * buf) {
+	Bit32u numm,numk,numb,numg;
 	numb=num % 1000;
 	num/=1000;
 	numk=num % 1000;
@@ -582,8 +594,8 @@ void DOS_Shell::CMD_COPY(char * args) {
 		dos.dta(save_dta);
 		return;
 	}
-	// Gather all sources (extension to copy more then 1 file specified at commandline)
-	// Concatating files go as follows: All parts except for the last bear the concat flag.
+	// Gather all sources (extension to copy more then 1 file specified at command line)
+	// Concatenating files go as follows: All parts except for the last bear the concat flag.
 	// This construction allows them to be counted (only the non concat set)
 	char* source_p = NULL;
 	char source_x[DOS_PATHLENGTH+CROSS_LEN];
@@ -669,7 +681,7 @@ void DOS_Shell::CMD_COPY(char * args) {
 		char* temp = strstr(pathTarget,"*.*");
 		if(temp) *temp = 0;//strip off *.* from target
 	
-		// add '\\' if target is a directoy
+		// add '\\' if target is a directory
 		if (pathTarget[strlen(pathTarget)-1]!='\\') {
 			if (DOS_FindFirst(pathTarget,0xffff & ~DOS_ATTR_VOLUME)) {
 				dta.GetResult(name,size,date,time,attr);
@@ -702,7 +714,7 @@ void DOS_Shell::CMD_COPY(char * args) {
 					strcpy(nameTarget,pathTarget);
 					if (nameTarget[strlen(nameTarget)-1]=='\\') strcat(nameTarget,name);
 
-					//Don't create a newfile when in concat mode
+					//Don't create a new file when in concat mode
 					if (oldsource.concat || DOS_CreateFile(nameTarget,0,&targetHandle)) {
 						Bit32u dummy=0;
 						//In concat mode. Open the target and seek to the eof
@@ -730,8 +742,9 @@ void DOS_Shell::CMD_COPY(char * args) {
 					}
 				} else WriteOut(MSG_Get("SHELL_CMD_COPY_FAILURE"),const_cast<char*>(source.filename.c_str()));
 			};
-			//On the next file
-			ret = DOS_FindNext();
+			//On to the next file if the previous one wasn't a device
+			if ((attr&DOS_ATTR_DEVICE) == 0) ret = DOS_FindNext();
+			else ret = false;
 		};
 	}
 
@@ -751,6 +764,11 @@ void DOS_Shell::CMD_SET(char * args) {
 		}
 		return;
 	}
+	//There are args:
+	char * pcheck = args;
+	while ( *pcheck && (*pcheck == ' ' || *pcheck == '\t')) pcheck++;
+	if (*pcheck && strlen(pcheck) >3 && (strncasecmp(pcheck,"/p ",3) == 0)) E_Exit("Set /P is not supported. Use Choice!");
+
 	char * p=strpbrk(args, "=");
 	if (!p) {
 		if (!GetEnvStr(args,line)) WriteOut(MSG_Get("SHELL_CMD_SET_NOT_SET"),args);
@@ -944,7 +962,7 @@ void DOS_Shell::CMD_CALL(char * args){
 
 void DOS_Shell::CMD_DATE(char * args) {
 	HELP("DATE");	
-	if(ScanCMDBool(args,"h")) {
+	if(ScanCMDBool(args,"H")) {
 		// synchronize date with host parameter
 		time_t curtime;
 		struct tm *loctime;
@@ -960,11 +978,11 @@ void DOS_Shell::CMD_DATE(char * args) {
 		return;
 	}
 	// check if a date was passed in command line
-	Bitu newday,newmonth,newyear;
+	Bit32u newday,newmonth,newyear;
 	if(sscanf(args,"%u-%u-%u",&newmonth,&newday,&newyear)==3) {
-		reg_cx = newyear;
-		reg_dh = newmonth;
-		reg_dl = newday;
+		reg_cx = static_cast<Bit16u>(newyear);
+		reg_dh = static_cast<Bit8u>(newmonth);
+		reg_dl = static_cast<Bit8u>(newday);
 
 		reg_ah=0x2b; // set system date
 		CALLBACK_RunRealInt(0x21);
@@ -976,13 +994,13 @@ void DOS_Shell::CMD_DATE(char * args) {
 	CALLBACK_RunRealInt(0x21);
 
 	const char* datestring = MSG_Get("SHELL_CMD_DATE_DAYS");
-	Bit8u length;
+	Bit32u length;
 	char day[6] = {0};
 	if(sscanf(datestring,"%u",&length) && (length<5) && (strlen(datestring)==(length*7+1))) {
 		// date string appears valid
-		for(int i = 0; i < length; i++) day[i] = datestring[reg_al*length+1+i];
+		for(Bit32u i = 0; i < length; i++) day[i] = datestring[reg_al*length+1+i];
 	}
-	bool dateonly = ScanCMDBool(args,"t");
+	bool dateonly = ScanCMDBool(args,"T");
 	if(!dateonly) WriteOut(MSG_Get("SHELL_CMD_DATE_NOW"));
 
 	const char* formatstring = MSG_Get("SHELL_CMD_DATE_FORMAT");
@@ -994,9 +1012,9 @@ void DOS_Shell::CMD_DATE(char * args) {
 			buffer[bufferptr] = formatstring[i];
 			bufferptr++;
 		} else {
-			if(formatstring[i]=='M') bufferptr += sprintf(buffer+bufferptr,"%02u",(Bitu)reg_dh);
-			if(formatstring[i]=='D') bufferptr += sprintf(buffer+bufferptr,"%02u",(Bitu)reg_dl);
-			if(formatstring[i]=='Y') bufferptr += sprintf(buffer+bufferptr,"%04u",(Bitu)reg_cx);
+			if(formatstring[i]=='M') bufferptr += sprintf(buffer+bufferptr,"%02u",(Bit8u) reg_dh);
+			if(formatstring[i]=='D') bufferptr += sprintf(buffer+bufferptr,"%02u",(Bit8u) reg_dl);
+			if(formatstring[i]=='Y') bufferptr += sprintf(buffer+bufferptr,"%04u",(Bit16u) reg_cx);
 		}
 	}
 	WriteOut("%s %s\n",day, buffer);
@@ -1005,7 +1023,7 @@ void DOS_Shell::CMD_DATE(char * args) {
 
 void DOS_Shell::CMD_TIME(char * args) {
 	HELP("TIME");
-	if(ScanCMDBool(args,"h")) {
+	if(ScanCMDBool(args,"H")) {
 		// synchronize time with host parameter
 		time_t curtime;
 		struct tm *loctime;
@@ -1025,7 +1043,7 @@ void DOS_Shell::CMD_TIME(char * args) {
 		mem_writed(BIOS_TIMER,ticks);
 		return;
 	}
-	bool timeonly = ScanCMDBool(args,"t");
+	bool timeonly = ScanCMDBool(args,"T");
 
 	reg_ah=0x2c; // get system time
 	CALLBACK_RunRealInt(0x21);

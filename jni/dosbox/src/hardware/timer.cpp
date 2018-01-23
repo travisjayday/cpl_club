@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -74,7 +74,10 @@ static void PIT0_Event(Bitu /*val*/) {
 			pit[0].delay=(1000.0f/((float)PIT_TICK_RATE/(float)pit[0].cntr));
 			pit[0].update_count=false;
 		}
-		PIC_AddEvent(PIT0_Event,pit[0].delay);
+		// regression to r3533 fixes flight simulator 5.0
+ 		double error = 	pit[0].start - PIC_FullIndex();
+ 		PIC_AddEvent(PIT0_Event,(float)(pit[0].delay + error));			
+//		PIC_AddEvent(PIT0_Event,pit[0].delay); // r3534
 	}
 }
 

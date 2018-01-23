@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 #include "setup.h"
 #include "paging.h"
 #include "regs.h"
+#include "voodoo_main.h"
 
 #include <string.h>
 
@@ -36,10 +37,11 @@
 struct LinkBlock {
 	Bitu used;
 	Bit32u pages[MAX_LINKS];
-};
+} __attribute__((aligned(8)));
 
 static struct MemoryBlock {
 	Bitu pages;
+	Bitu reported_pages;
 	PageHandler * * phandlers;
 	MemHandle * mhandles;
 	LinkBlock links;
@@ -54,7 +56,8 @@ static struct MemoryBlock {
 		bool enabled;
 		Bit8u controlport;
 	} a20;
-} memory;
+	Bit32u mem_alias_pagemask;
+} memory __attribute__((aligned(8)));
 
 HostPt MemBase;
 
@@ -73,7 +76,7 @@ public:
 			LOG_MSG("Illegal read from %x, CS:IP %8x:%8x",addr,SegValue(cs),reg_eip);
 		}
 #endif
-		return 0;
+		return 0xFF; /* Real hardware returns 0xFF not 0x00 */
 	} 
 	void writeb(PhysPt addr,Bitu val) {
 #if C_DEBUG
@@ -101,7 +104,20 @@ public:
 	}
 };
 
-class ROMPageHandler : public RAMPageHandler {
+class RAMAliasPageHandler : public PageHandler {
+public:
+	RAMAliasPageHandler() {
+		flags=PFLAG_READABLE|PFLAG_WRITEABLE;
+	}
+	HostPt GetHostReadPt(Bitu phys_page) {
+		return MemBase+(phys_page&memory.mem_alias_pagemask)*MEM_PAGESIZE;
+	}
+	HostPt GetHostWritePt(Bitu phys_page) {
+		return MemBase+(phys_page&memory.mem_alias_pagemask)*MEM_PAGESIZE;
+	}
+};
+
+class ROMPageHandler : public RAMAliasPageHandler {
 public:
 	ROMPageHandler() {
 		flags=PFLAG_READABLE|PFLAG_HASROM;
@@ -120,6 +136,7 @@ public:
 
 
 static IllegalPageHandler illegal_page_handler;
+static RAMAliasPageHandler ram_alias_page_handler;
 static RAMPageHandler ram_page_handler;
 static ROMPageHandler rom_page_handler;
 
@@ -133,6 +150,7 @@ void MEM_SetLFB(Bitu page, Bitu pages, PageHandler *handler, PageHandler *mmioha
 }
 
 PageHandler * MEM_GetPageHandler(Bitu phys_page) {
+	phys_page &= memory.mem_alias_pagemask;
 	if (phys_page<memory.pages) {
 		return memory.phandlers[phys_page];
 	} else if ((phys_page>=memory.lfb.start_page) && (phys_page<memory.lfb.end_page)) {
@@ -140,6 +158,8 @@ PageHandler * MEM_GetPageHandler(Bitu phys_page) {
 	} else if ((phys_page>=memory.lfb.start_page+0x01000000/4096) &&
 				(phys_page<memory.lfb.start_page+0x01000000/4096+16)) {
 		return memory.lfb.mmiohandler;
+	} else if ((phys_page>=(VOODOO_MEM>>12)) && (phys_page<(VOODOO_MEM>>12)+VOODOO_PAGES)) {
+		return (PageHandler*)voodoo_pagehandler;
 	}
 	return &illegal_page_handler;
 }
@@ -152,8 +172,12 @@ void MEM_SetPageHandler(Bitu phys_page,Bitu pages,PageHandler * handler) {
 }
 
 void MEM_ResetPageHandler(Bitu phys_page, Bitu pages) {
+	PageHandler *ram_ptr =
+		memory.mem_alias_pagemask == (Bit32u)(~0UL)
+		? (PageHandler*)(&ram_page_handler) /* no aliasing */
+		: (PageHandler*)(&ram_alias_page_handler); /* aliasing */
 	for (;pages>0;pages--) {
-		memory.phandlers[phys_page]=&ram_page_handler;
+		memory.phandlers[phys_page]=ram_ptr;
 		phys_page++;
 	}
 }
@@ -174,14 +198,47 @@ void mem_strcpy(PhysPt dest,PhysPt src) {
 }
 
 void mem_memcpy(PhysPt dest,PhysPt src,Bitu size) {
+	if (size==0)
+			return;
+
+	if ((dest >> 12) == ((dest+size-1)>>12) &&
+		(src >> 12) == ((src+size-1)>>12)	) { // Always same TLB entry
+			HostPt dest_tlb_addr=get_tlb_write(dest);
+			HostPt src_tlb_addr=get_tlb_read(src);
+			if (dest_tlb_addr){ if(src_tlb_addr) {
+#if NEON_MEMORY
+		memcpy_neon_UNAL(dest_tlb_addr+dest,src_tlb_addr+src, size);
+#else
+		memcpy(dest_tlb_addr+dest,src_tlb_addr+src, size);
+#endif
+			return;
+			}}
+	}
 	while (size--) mem_writeb_inline(dest++,mem_readb_inline(src++));
 }
 
 void MEM_BlockRead(PhysPt pt,void * data,Bitu size) {
 	Bit8u * write=reinterpret_cast<Bit8u *>(data);
-	while (size--) {
-		*write++=mem_readb_inline(pt++);
+	if (size==0)
+		return;
+
+
+	if ((pt >> 12) == ((pt+size-1)>>12)) { // Always same TLB entry
+			HostPt tlb_addr=get_tlb_read(pt);
+			if (tlb_addr) {
+#if NEON_MEMORY
+		memcpy_neon_UNAL(write,tlb_addr+pt, size);
+#else
+		memcpy(write,tlb_addr+pt, size);
+#endif
+			return;
+			}
 	}
+
+		while (size--) {
+			*write++=mem_readb_inline(pt++);
+		}
+
 }
 
 void MEM_BlockWrite(PhysPt pt,void const * const data,Bitu size) {
@@ -206,7 +263,11 @@ void MEM_BlockWrite(PhysPt pt,void const * const data,Bitu size) {
 			}
 		}
 		// Fast path
+#ifdef NEON_MEMORY
+		memcpy_neon_UNAL(tlb_addr+pt, read, size);
+#else
 		memcpy(tlb_addr+pt, read, size);
+#endif
 	}
 	else {
 		Bitu current = (((pt>>12)+1)<<12) - pt;
@@ -230,13 +291,13 @@ void MEM_StrCopy(PhysPt pt,char * data,Bitu size) {
 }
 
 Bitu MEM_TotalPages(void) {
-	return memory.pages;
+	return memory.reported_pages;
 }
 
 Bitu MEM_FreeLargest(void) {
 	Bitu size=0;Bitu largest=0;
 	Bitu index=XMS_START;	
-	while (index<memory.pages) {
+	while (index<memory.reported_pages) {
 		if (!memory.mhandles[index]) {
 			size++;
 		} else {
@@ -252,7 +313,7 @@ Bitu MEM_FreeLargest(void) {
 Bitu MEM_FreeTotal(void) {
 	Bitu free=0;
 	Bitu index=XMS_START;	
-	while (index<memory.pages) {
+	while (index<memory.reported_pages) {
 		if (!memory.mhandles[index]) free++;
 		index++;
 	}
@@ -276,7 +337,7 @@ INLINE Bitu BestMatch(Bitu size) {
 	Bitu first=0;
 	Bitu best=0xfffffff;
 	Bitu best_first=0;
-	while (index<memory.pages) {
+	while (index<memory.reported_pages) {
 		/* Check if we are searching for first free page */
 		if (!first) {
 			/* Check if this is a free page */
@@ -391,7 +452,7 @@ bool MEM_ReAllocatePages(MemHandle & handle,Bitu pages,bool sequence) {
 		if (sequence) {
 			index=last+1;
 			Bitu free=0;
-			while ((index<(MemHandle)memory.pages) && !memory.mhandles[index]) {
+			while ((index<(MemHandle)memory.reported_pages) && !memory.mhandles[index]) {
 				index++;free++;
 			}
 			if (free>=need) {
@@ -562,6 +623,8 @@ void PreparePCJRCartRom(void) {
 
 HostPt GetMemBase(void) { return MemBase; }
 
+Bit32s MEM_RealMemory;
+
 class MEMORY:public Module_base{
 private:
 	IO_ReadHandleObject ReadHandler;
@@ -572,31 +635,105 @@ public:
 		Section_prop * section=static_cast<Section_prop *>(configuration);
 	
 		/* Setup the Physical Page Links */
-		Bitu memsize=section->Get_int("memsize");
-	
-		if (memsize < 1) memsize = 1;
+		Bitu memsize=section->Get_int("memsize");	
+		Bitu memsizekb=section->Get_int("memsizekb");
+		Bitu address_bits=section->Get_int("memalias");
+
+		if (address_bits == 0)
+			address_bits = 32;
+		else if (address_bits < 20)
+			address_bits = 20;
+		else if (address_bits > 32)
+			address_bits = 32;
+
+		/* WARNING: Binary arithmetic done with 64-bit integers because under Microsoft C++
+		            ((1UL << 32UL) - 1UL) == 0, which is WRONG.
+					But I'll never get back the 4 days I wasted chasing it down, trying to
+					figure out why DOSBox was getting stuck reopening it's own CON file handle. */
+		memory.mem_alias_pagemask = (uint32_t)
+			(((((uint64_t)1) << (uint64_t)address_bits) - (uint64_t)1) >> (uint64_t)12);
+
+		/* If the page mask affects below the 1MB boundary then abort. There is a LOT in
+		   DOSBox that relies on reading and maintaining DOS structures and wrapping in
+		   that way is a good way to cause a crash. Note 0xFF << 12 == 0xFFFFF */
+		if ((memory.mem_alias_pagemask & 0xFF) != 0xFF) {
+			//fprintf(stderr,"BUG: invalid alias pagemask 0x%08lX\n",
+			//	(unsigned long)memory.mem_alias_pagemask);
+			abort();
+		}
+
+		/* we can't have more memory than the memory aliasing allows */
+		if (address_bits < 32 && ((memsize*256)+(memsizekb/4)) > (memory.mem_alias_pagemask+1)) {
+			LOG_MSG("%u-bit memory aliasing limits you to %uMB",
+				address_bits,(memory.mem_alias_pagemask+1)/256);
+			memsize = (memory.mem_alias_pagemask+1)/256;
+			memsizekb = 0;
+		}
+
+		if (memsizekb > 32768) memsizekb = 32768;
+		if (memsizekb == 0 && memsize < 1) memsize = 1;
+		else if (memsizekb != 0 && memsize < 0) memsize = 0;
 		/* max 63 to solve problems with certain xms handlers */
-		if (memsize > MAX_MEMORY-1) {
+		if ((memsize+(memsizekb/1024)) > MAX_MEMORY-1) {
 			LOG_MSG("Maximum memory size is %d MB",MAX_MEMORY - 1);
 			memsize = MAX_MEMORY-1;
+			memsizekb = 0;
 		}
-		if (memsize > SAFE_MEMORY-1) {
+		if ((memsize+(memsizekb/1024)) > SAFE_MEMORY-1) {
 			LOG_MSG("Memory sizes above %d MB are NOT recommended.",SAFE_MEMORY - 1);
 			LOG_MSG("Stick with the default values unless you are absolutely certain.");
 		}
-		MemBase = new Bit8u[memsize*1024*1024];
+		memory.reported_pages = memory.pages =
+			((memsize*1024*1024) + (memsizekb*1024))/4096;
+
+		/* if the config file asks for less than 1MB of memory
+		 * then say so to the DOS program. but way too much code
+		 * here assumes memsize >= 1MB */
+		if (memory.pages < ((1024*1024)/4096))
+			memory.pages = ((1024*1024)/4096);
+
+		MemBase = new Bit8u[memory.pages*4096];
 		if (!MemBase) E_Exit("Can't allocate main memory of %d MB",memsize);
 		/* Clear the memory, as new doesn't always give zeroed memory
 		 * (Visual C debug mode). We want zeroed memory though. */
-		memset((void*)MemBase,0,memsize*1024*1024);
-		memory.pages = (memsize*1024*1024)/4096;
+		memset((void*)MemBase,0,memory.reported_pages*4096);
+		/* the rest of "ROM" is for unmapped devices so we need to fill it appropriately */
+		if (memory.reported_pages < memory.pages)
+			memset((char*)MemBase+(memory.reported_pages*4096),0xFF,
+				(memory.pages - memory.reported_pages)*4096);
+		/* except for 0xF0000-0xFFFFF */
+		memset((char*)MemBase+0xF0000,0x00,0x10000);
+		/* and 0xC0000-0xD0000 */
+		memset((char*)MemBase+0xC0000,0x00,0x10000);
 		/* Allocate the data for the different page information blocks */
+
+		PageHandler *ram_ptr =
+			memory.mem_alias_pagemask == (Bit32u)(~0UL)
+			? (PageHandler*)(&ram_page_handler) /* no aliasing */
+			: (PageHandler*)(&ram_alias_page_handler); /* aliasing */
+
 		memory.phandlers=new  PageHandler * [memory.pages];
 		memory.mhandles=new MemHandle [memory.pages];
-		for (i = 0;i < memory.pages;i++) {
-			memory.phandlers[i] = &ram_page_handler;
+		for (i = 0;i < memory.reported_pages;i++) {
+			memory.phandlers[i] = ram_ptr;
 			memory.mhandles[i] = 0;				//Set to 0 for memory allocation
 		}
+		for (;i < memory.pages;i++) {
+			memory.phandlers[i] = &illegal_page_handler;
+			memory.mhandles[i] = 0;				//Set to 0 for memory allocation
+		}
+		/* apparently vital areas for DOS */
+		for (i=0xc8;i<0xd0;i++) {
+			memory.phandlers[i] = ram_ptr;
+			memory.mhandles[i] = 0;				//Set to 0 for memory allocation
+		}
+#if 0
+		/* FIXME: Same with the 0x9fff segment */
+		for (i=0x9f;i<0xa0;i++) {
+			memory.phandlers[i] = ram_ptr;
+			memory.mhandles[i] = 0;				//Set to 0 for memory allocation
+		}
+#endif
 		/* Setup rom at 0xc0000-0xc8000 */
 		for (i=0xc0;i<0xc8;i++) {
 			memory.phandlers[i] = &rom_page_handler;

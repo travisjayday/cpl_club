@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -28,13 +28,17 @@
 #include "drives.h"
 #include "cross.h"
 #include "regs.h"
+#include "ide.h"
 #include "callback.h"
 #include "cdrom.h"
 #include "dos_system.h"
 #include "dos_inc.h"
 #include "bios.h"
+#include "bios_disk.h" 
 #include "setup.h"
 #include "control.h"
+#include "inout.h"
+#include "dma.h"
 
 
 #if defined(OS2)
@@ -48,27 +52,55 @@ Bitu DEBUG_EnableDebugger(void);
 #endif
 
 void MSCDEX_SetCDInterface(int intNr, int forceCD);
-
+static Bitu ZDRIVE_NUM = 25;
 
 class MOUNT : public Program {
 public:
-	void Run(void)
-	{
+	void ListMounts(void) {
+		char name[DOS_NAMELENGTH_ASCII];Bit32u size;Bit16u date;Bit16u time;Bit8u attr;
+		/* Command uses dta so set it to our internal dta */
+		RealPt save_dta = dos.dta();
+		dos.dta(dos.tables.tempdta);
+		DOS_DTA dta(dos.dta());
+
+		WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_1"));
+		WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_FORMAT"),"Drive","Type","Label");
+		for(int p = 0;p < 8;p++) WriteOut("----------");
+
+		for (int d = 0;d < DOS_DRIVES;d++) {
+			if (!Drives[d]) continue;
+
+			char root[4] = {'A'+d,':','\\',0};
+			bool ret = DOS_FindFirst(root,DOS_ATTR_VOLUME);
+			if (ret) {
+				dta.GetResult(name,size,date,time,attr);
+				DOS_FindNext(); //Mark entry as invalid
+			} else name[0] = 0;
+
+			/* Change 8.3 to 11.0 */
+			char* dot = strchr(name,'.');
+			if(dot && (dot - name == 8) ) { 
+				name[8] = name[9];name[9] = name[10];name[10] = name[11];name[11] = 0;
+			}
+
+			root[1] = 0; //This way, the format string can be reused.
+			WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_FORMAT"),root, Drives[d]->GetInfo(),name);		
+		}
+		dos.dta(save_dta);
+	}
+
+	void Run(void) {
 		DOS_Drive * newdrive;char drive;
 		std::string label;
 		std::string umount;
+		std::string newz;
 
 		//Hack To allow long commandlines
 		ChangeToLongCmd();
 		/* Parse the command line */
 		/* if the command line is empty show current mounts */
 		if (!cmd->GetCount()) {
-			WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_1"));
-			for (int d=0;d<DOS_DRIVES;d++) {
-				if (Drives[d]) {
-					WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_2"),d+'A',Drives[d]->GetInfo());
-				}
-			}
+			ListMounts();
 			return;
 		}
 
@@ -83,12 +115,12 @@ public:
 		if (cmd->FindString("-u",umount,false)) {
 			umount[0] = toupper(umount[0]);
 			int i_drive = umount[0]-'A';
-				if(i_drive < DOS_DRIVES && i_drive >= 0 && Drives[i_drive]) {
+				if (i_drive < DOS_DRIVES && i_drive >= 0 && Drives[i_drive]) {
 					switch (DriveManager::UnmountDrive(i_drive)) {
 					case 0:
 						Drives[i_drive] = 0;
 						if(i_drive == DOS_GetDefaultDrive()) 
-							DOS_SetDrive(toupper('Z') - 'A');
+							DOS_SetDrive(ZDRIVE_NUM);
 						WriteOut(MSG_Get("PROGRAM_MOUNT_UMOUNT_SUCCESS"),umount[0]);
 						break;
 					case 1:
@@ -103,8 +135,46 @@ public:
 				}
 			return;
 		}
-	   
-		// Show list of cdroms
+		
+		/* Check for moving Z: */
+		/* Only allowing moving it once. It is merely a convenience added for the wine team */
+		if (ZDRIVE_NUM == 25 && cmd->FindString("-z", newz,false)) {
+			newz[0] = toupper(newz[0]);
+			int i_newz = newz[0] - 'A';
+			if (i_newz >= 0 && i_newz < DOS_DRIVES-1 && !Drives[i_newz]) {
+				ZDRIVE_NUM = i_newz;
+				/* remap drives */
+				Drives[i_newz] = Drives[25];
+				Drives[25] = 0;
+				DOS_Shell *fs = static_cast<DOS_Shell *>(first_shell); //dynamic ?				
+				/* Update environment */
+				std::string line = "";
+				char ppp[2] = {newz[0],0};
+				std::string tempenv = ppp; tempenv += ":\\";
+				if (fs->GetEnvStr("PATH",line)){
+					std::string::size_type idx = line.find('=');
+					std::string value = line.substr(idx +1 , std::string::npos);
+					while ( (idx = value.find("Z:\\")) != std::string::npos ||
+					        (idx = value.find("z:\\")) != std::string::npos  )
+						value.replace(idx,3,tempenv);
+					line = value;
+				}
+				if (!line.size()) line = tempenv;
+				fs->SetEnv("PATH",line.c_str());
+				tempenv += "COMMAND.COM";
+				fs->SetEnv("COMSPEC",tempenv.c_str());
+
+				/* Update batch file if running from Z: (very likely: autoexec) */
+				if(fs->bf) {
+					std::string &name = fs->bf->filename;
+					if(name.length() >2 &&  name[0] == 'Z' && name[1] == ':') name[0] = newz[0];
+				}
+				/* Change the active drive */
+				if (DOS_GetDefaultDrive() == 25) DOS_SetDrive(i_newz);
+			}
+			return;
+		}
+		/* Show list of cdroms */
 		if (cmd->FindExist("-cd",false)) {
 			int num = SDL_CDNumDrives();
    			WriteOut(MSG_Get("PROGRAM_MOUNT_CDROMS_FOUND"),num);
@@ -130,7 +200,7 @@ public:
 				str_size="512,32,32765,16000";
 				mediaid=0xF8;		/* Hard Disk */
 			} else if (type=="cdrom") {
-				str_size="2048,1,32765,0";
+				str_size="2048,1,65535,0";
 				mediaid=0xF8;		/* Hard Disk */
 			} else {
 				WriteOut(MSG_Get("PROGAM_MOUNT_ILL_TYPE"),type.c_str());
@@ -386,10 +456,10 @@ public:
 		if (reg_al==0x80) {
 			reg_ax=0x4310;CALLBACK_RunRealInt(0x2f);
 			Bit16u xms_seg=SegValue(es);Bit16u xms_off=reg_bx;
-			reg_ah=8;
+			reg_ah=0x88; /* use extended version */
 			CALLBACK_RunRealFar(xms_seg,xms_off);
 			if (!reg_bl) {
-				WriteOut(MSG_Get("PROGRAM_MEM_EXTEND"),reg_dx);
+				WriteOut(MSG_Get("PROGRAM_MEM_EXTEND"),reg_edx);
 			}
 		}	
 		/* Test for and show free EMS */
@@ -523,7 +593,7 @@ public:
 		FILE *usefile_1=NULL;
 		FILE *usefile_2=NULL;
 		Bitu i=0; 
-		Bit32u floppysize;
+		Bit32u floppysize=0;
 		Bit32u rombytesize_1=0;
 		Bit32u rombytesize_2=0;
 		Bit8u drive = 'A';
@@ -757,6 +827,9 @@ public:
 			RemoveEMSPageFrame();
 			WriteOut(MSG_Get("PROGRAM_BOOT_BOOT"), drive);
 			for(i=0;i<512;i++) real_writeb(0, 0x7c00 + i, bootarea.rawdata[i]);
+
+			/* create appearance of floppy drive DMA usage (Demon's Forge) */
+			if (!IS_TANDY_ARCH && floppysize!=0) GetDMAChannel(2)->tcount=true;
 
 			/* revector some dos-allocated interrupts */
 			real_writed(0,0x01*4,0xf000ff53);
@@ -1011,10 +1084,13 @@ public:
 		/* Check for unmounting */
 		if (cmd->FindString("-u",umount,false)) {
 			umount[0] = toupper(umount[0]);
-			int i_drive = umount[0]-'A';
+			if (isalpha(umount[0])) { /* if it's a drive letter, then traditional usage applies */
+				int i_drive = umount[0]-'A';
 				if (i_drive < DOS_DRIVES && i_drive >= 0 && Drives[i_drive]) {
 					switch (DriveManager::UnmountDrive(i_drive)) {
 					case 0:
+						/* TODO: If the drive letter is also a CD-ROM drive attached to IDE, then let the
+							 IDE code know */
 						Drives[i_drive] = 0;
 						if (i_drive == DOS_GetDefaultDrive()) 
 							DOS_SetDrive(toupper('Z') - 'A');
@@ -1030,10 +1106,19 @@ public:
 				} else {
 					WriteOut(MSG_Get("PROGRAM_MOUNT_UMOUNT_NOT_MOUNTED"),umount[0]);
 				}
+			}
+			else if (isdigit(umount[0])) { /* DOSBox-X: drives mounted by number (INT 13h) can be unmounted this way */
+				WriteOut("Unmounting imgmount by number (INT13h) is not yet implemented");
+			}
+			else {
+				WriteOut("Unknown imgmount unmount usage");
+			}
 			return;
 		}
 
-
+		bool ide_slave = false;
+		signed char ide_index = -1;
+		std::string ideattach="auto";
 		std::string type="hdd";
 		std::string fstype="fat";
 		cmd->FindString("-t",type,true);
@@ -1047,8 +1132,27 @@ public:
 			std::string str_size;
 			mediaid=0xF8;
 
+			/* DOSBox-X: we allow "-ide" to allow controlling which IDE controller and slot to attach the hard disk/CD-ROM to */
+			cmd->FindString("-ide",ideattach,true);
+
+			if (ideattach == "auto") {
+				if (type == "floppy") {
+				}
+				else {
+					IDE_Auto(ide_index,ide_slave);
+				}
+				
+				fprintf(stderr,"IDE: index %d slave=%d\n",ide_index,ide_slave?1:0);
+			}
+			else if (ideattach != "none" && isdigit(ideattach[0]) && ideattach[0] > '0') { /* takes the form [controller]<m/s> such as: 1m for primary master */
+				ide_index = ideattach[0] - '1';
+				if (ideattach.length() >= 1) ide_slave = (ideattach[1] == 's');
+				fprintf(stderr,"IDE: index %d slave=%d\n",ide_index,ide_slave?1:0);
+			}
+
 			if (type=="floppy") {
-				mediaid=0xF0;		
+				mediaid=0xF0;
+				ideattach="none";
 			} else if (type=="iso") {
 				str_size=="2048,1,60000,0";	// ignored, see drive_iso.cpp (AllocationInfo)
 				mediaid=0xF8;		
@@ -1147,10 +1251,6 @@ public:
 			}
 			if (paths.size() == 1)
 				temp_line = paths[0];
-			if (paths.size() > 1 && fstype != "iso") {
-				WriteOut(MSG_Get("PROGRAM_IMGMOUNT_MULTIPLE_NON_CUEISO_FILES"));
-				return;
-			}
 
 			if(fstype=="fat") {
 				if (imgsizedetect) {
@@ -1182,12 +1282,129 @@ public:
 					LOG_MSG("autosized image file: %d:%d:%d:%d",sizes[0],sizes[1],sizes[2],sizes[3]);
 				}
 
-				newdrive=new fatDrive(temp_line.c_str(),sizes[0],sizes[1],sizes[2],sizes[3],0);
-				if(!(dynamic_cast<fatDrive*>(newdrive))->created_successfully) {
-					delete newdrive;
-					newdrive = 0;
+				if (Drives[drive-'A']) {
+					WriteOut(MSG_Get("PROGRAM_IMGMOUNT_ALREADY_MOUNTED"));
+					return;
+				}
+
+				std::vector<DOS_Drive*> imgDisks;
+				std::vector<std::string>::size_type i;
+				std::vector<DOS_Drive*>::size_type ct;
+				
+				for (i = 0; i < paths.size(); i++) {
+					DOS_Drive* newDrive = new fatDrive(paths[i].c_str(),sizes[0],sizes[1],sizes[2],sizes[3],0);
+					imgDisks.push_back(newDrive);
+					if(!(dynamic_cast<fatDrive*>(newDrive))->created_successfully) {
+						WriteOut(MSG_Get("PROGRAM_IMGMOUNT_CANT_CREATE"));
+						for(ct = 0; ct < imgDisks.size(); ct++) {
+							delete imgDisks[ct];
+						}
+						return;
+					}
+				}
+
+				// Update DriveManager
+				for(ct = 0; ct < imgDisks.size(); ct++) {
+					DriveManager::AppendDisk(drive - 'A', imgDisks[ct]);
+				}
+				DriveManager::InitializeDrive(drive - 'A');
+
+				// Set the correct media byte in the table 
+				mem_writeb(Real2Phys(dos.tables.mediaid) + (drive - 'A') * 2, mediaid);
+				
+				/* Command uses dta so set it to our internal dta */
+				RealPt save_dta = dos.dta();
+				dos.dta(dos.tables.tempdta);
+
+				for(ct = 0; ct < imgDisks.size(); ct++) {
+					DriveManager::CycleAllDisks();
+
+					char root[4] = {drive, ':', '\\', 0};
+					DOS_FindFirst(root, DOS_ATTR_VOLUME); // force obtaining the label and saving it in dirCache
+				}
+				dos.dta(save_dta);
+
+				std::string tmp(paths[0]);
+				for (i = 1; i < paths.size(); i++) {
+					tmp += "; " + paths[i];
+				}
+				WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_2"), drive, tmp.c_str());
+
+				if (paths.size() == 1) {
+					newdrive = imgDisks[0];
+					if(((fatDrive *)newdrive)->loadedDisk->hardDrive) {
+						if(imageDiskList[2] == NULL) {
+							imageDiskList[2] = ((fatDrive *)newdrive)->loadedDisk;
+							// If instructed, attach to IDE controller as ATA hard disk
+							if (ide_index >= 0) IDE_Hard_Disk_Attach(ide_index,ide_slave,2);
+							updateDPT();
+							return;
+						}
+						if(imageDiskList[3] == NULL) {
+							imageDiskList[3] = ((fatDrive *)newdrive)->loadedDisk;
+							// If instructed, attach to IDE controller as ATA hard disk
+							if (ide_index >= 0) IDE_Hard_Disk_Attach(ide_index,ide_slave,3);
+							updateDPT();
+							return;
+						}
+					}
+					if(!((fatDrive *)newdrive)->loadedDisk->hardDrive) {
+						imageDiskList[0] = ((fatDrive *)newdrive)->loadedDisk;
+					}
 				}
 			} else if (fstype=="iso") {
+
+				if (Drives[drive-'A']) {
+					WriteOut(MSG_Get("PROGRAM_IMGMOUNT_ALREADY_MOUNTED"));
+					return;
+				}
+				MSCDEX_SetCDInterface(CDROM_USE_SDL, -1);
+				// create new drives for all images
+				std::vector<DOS_Drive*> isoDisks;
+				std::vector<std::string>::size_type i;
+				std::vector<DOS_Drive*>::size_type ct;
+				for (i = 0; i < paths.size(); i++) {
+					int error = -1;
+					DOS_Drive* newDrive = new isoDrive(drive, paths[i].c_str(), mediaid, error);
+					isoDisks.push_back(newDrive);
+					switch (error) {
+						case 0  :	break;
+						case 1  :	WriteOut(MSG_Get("MSCDEX_ERROR_MULTIPLE_CDROMS"));	break;
+						case 2  :	WriteOut(MSG_Get("MSCDEX_ERROR_NOT_SUPPORTED"));	break;
+						case 3  :	WriteOut(MSG_Get("MSCDEX_ERROR_OPEN"));				break;
+						case 4  :	WriteOut(MSG_Get("MSCDEX_TOO_MANY_DRIVES"));		break;
+						case 5  :	WriteOut(MSG_Get("MSCDEX_LIMITED_SUPPORT"));		break;
+						case 6  :	WriteOut(MSG_Get("MSCDEX_INVALID_FILEFORMAT"));		break;
+						default :	WriteOut(MSG_Get("MSCDEX_UNKNOWN_ERROR"));			break;
+					}
+					// error: clean up and leave
+					if (error) {
+						for(ct = 0; ct < isoDisks.size(); ct++) {
+							delete isoDisks[ct];
+						}
+						return;
+					}
+				}
+				// Update DriveManager
+				for(ct = 0; ct < isoDisks.size(); ct++) {
+					DriveManager::AppendDisk(drive - 'A', isoDisks[ct]);
+				}
+				DriveManager::InitializeDrive(drive - 'A');
+				
+				// Set the correct media byte in the table 
+				mem_writeb(Real2Phys(dos.tables.mediaid) + (drive - 'A') * 2, mediaid);
+
+				// If instructed, attach to IDE controller as ATAPI CD-ROM device
+				if (ide_index >= 0) IDE_CDROM_Attach(ide_index,ide_slave,drive - 'A');
+				
+				// Print status message (success)
+				WriteOut(MSG_Get("MSCDEX_SUCCESS"));
+				std::string tmp(paths[0]);
+				for (i = 1; i < paths.size(); i++) {
+					tmp += "; " + paths[i];
+				}
+				WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_2"), drive, tmp.c_str());
+
 			} else {
 				FILE *newDisk = fopen(temp_line.c_str(), "rb+");
 				fseek(newDisk,0L, SEEK_END);
@@ -1201,86 +1418,15 @@ public:
 			return;
 		}
 
-		if(fstype=="fat") {
-			if (Drives[drive-'A']) {
-				WriteOut(MSG_Get("PROGRAM_IMGMOUNT_ALREADY_MOUNTED"));
-				if (newdrive) delete newdrive;
-				return;
-			}
-			if (!newdrive) {WriteOut(MSG_Get("PROGRAM_IMGMOUNT_CANT_CREATE"));return;}
-			Drives[drive-'A']=newdrive;
-			// Set the correct media byte in the table 
-			mem_writeb(Real2Phys(dos.tables.mediaid)+(drive-'A')*2,mediaid);
-			WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_2"),drive,temp_line.c_str());
-			if(((fatDrive *)newdrive)->loadedDisk->hardDrive) {
-				if(imageDiskList[2] == NULL) {
-					imageDiskList[2] = ((fatDrive *)newdrive)->loadedDisk;
-					updateDPT();
-					return;
-				}
-				if(imageDiskList[3] == NULL) {
-					imageDiskList[3] = ((fatDrive *)newdrive)->loadedDisk;
-					updateDPT();
-					return;
-				}
-			}
-			if(!((fatDrive *)newdrive)->loadedDisk->hardDrive) {
-				imageDiskList[0] = ((fatDrive *)newdrive)->loadedDisk;
-			}
-		} else if (fstype=="iso") {
-			if (Drives[drive-'A']) {
-				WriteOut(MSG_Get("PROGRAM_IMGMOUNT_ALREADY_MOUNTED"));
-				return;
-			}
-			MSCDEX_SetCDInterface(CDROM_USE_SDL, -1);
-			// create new drives for all images
-			std::vector<DOS_Drive*> isoDisks;
-			std::vector<std::string>::size_type i;
-			std::vector<DOS_Drive*>::size_type ct;
-			for (i = 0; i < paths.size(); i++) {
-				int error = -1;
-				DOS_Drive* newDrive = new isoDrive(drive, paths[i].c_str(), mediaid, error);
-				isoDisks.push_back(newDrive);
-				switch (error) {
-					case 0  :	break;
-					case 1  :	WriteOut(MSG_Get("MSCDEX_ERROR_MULTIPLE_CDROMS"));	break;
-					case 2  :	WriteOut(MSG_Get("MSCDEX_ERROR_NOT_SUPPORTED"));	break;
-					case 3  :	WriteOut(MSG_Get("MSCDEX_ERROR_OPEN"));				break;
-					case 4  :	WriteOut(MSG_Get("MSCDEX_TOO_MANY_DRIVES"));		break;
-					case 5  :	WriteOut(MSG_Get("MSCDEX_LIMITED_SUPPORT"));		break;
-					case 6  :	WriteOut(MSG_Get("MSCDEX_INVALID_FILEFORMAT"));		break;
-					default :	WriteOut(MSG_Get("MSCDEX_UNKNOWN_ERROR"));			break;
-				}
-				// error: clean up and leave
-				if (error) {
-					for(ct = 0; ct < isoDisks.size(); ct++) {
-						delete isoDisks[ct];
-					}
-					return;
-				}
-			}
-			// Update DriveManager
-			for(ct = 0; ct < isoDisks.size(); ct++) {
-				DriveManager::AppendDisk(drive - 'A', isoDisks[ct]);
-			}
-			DriveManager::InitializeDrive(drive - 'A');
-			
-			// Set the correct media byte in the table 
-			mem_writeb(Real2Phys(dos.tables.mediaid) + (drive - 'A') * 2, mediaid);
-			
-			// Print status message (success)
-			WriteOut(MSG_Get("MSCDEX_SUCCESS"));
-			std::string tmp(paths[0]);
-			for (i = 1; i < paths.size(); i++) {
-				tmp += "; " + paths[i];
-			}
-			WriteOut(MSG_Get("PROGRAM_MOUNT_STATUS_2"), drive, tmp.c_str());
-			
-		} else if (fstype=="none") {
+		if (fstype=="none") {
+			/* TODO: Notify IDE ATA emulation if a drive is already there */
 			if(imageDiskList[drive-'0'] != NULL) delete imageDiskList[drive-'0'];
 			imageDiskList[drive-'0'] = newImage;
 			updateDPT();
 			WriteOut(MSG_Get("PROGRAM_IMGMOUNT_MOUNT_NUMBER"),drive-'0',temp_line.c_str());
+
+			// If instructed, attach to IDE controller as ATA hard disk
+			if (ide_index >= 0) IDE_Hard_Disk_Attach(ide_index,ide_slave,drive-'0');
 		}
 
 		// check if volume label is given. becareful for cdrom
@@ -1400,12 +1546,13 @@ void DOS_SetupPrograms(void) {
 	MSG_Add("PROGRAM_LOADFIX_ERROR","Memory allocation error.\n");
 
 	MSG_Add("MSCDEX_SUCCESS","MSCDEX installed.\n");
-	MSG_Add("MSCDEX_ERROR_MULTIPLE_CDROMS","MSCDEX: Failure: Drive-letters of multiple CDRom-drives have to be continuous.\n");
+	MSG_Add("MSCDEX_ERROR_MULTIPLE_CDROMS","MSCDEX: Failure: Drive-letters of multiple CD-ROM drives have to be continuous.\n");
 	MSG_Add("MSCDEX_ERROR_NOT_SUPPORTED","MSCDEX: Failure: Not yet supported.\n");
+	MSG_Add("MSCDEX_ERROR_PATH","MSCDEX: Specified location is not a CD-ROM drive.\n");
 	MSG_Add("MSCDEX_ERROR_OPEN","MSCDEX: Failure: Invalid file or unable to open.\n");
-	MSG_Add("MSCDEX_TOO_MANY_DRIVES","MSCDEX: Failure: Too many CDRom-drives (max: 5). MSCDEX Installation failed.\n");
+	MSG_Add("MSCDEX_TOO_MANY_DRIVES","MSCDEX: Failure: Too many CD-ROM drives (max: 5). MSCDEX Installation failed.\n");
 	MSG_Add("MSCDEX_LIMITED_SUPPORT","MSCDEX: Mounted subdirectory: limited support.\n");
-	MSG_Add("MSCDEX_INVALID_FILEFORMAT","MSCDEX: Failure: File is either no iso/cue image or contains errors.\n");
+	MSG_Add("MSCDEX_INVALID_FILEFORMAT","MSCDEX: Failure: File is either no ISO/CUE image or contains errors.\n");
 	MSG_Add("MSCDEX_UNKNOWN_ERROR","MSCDEX: Failure: Unknown error.\n");
 
 	MSG_Add("PROGRAM_RESCAN_SUCCESS","Drive cache cleared.\n");
@@ -1419,7 +1566,7 @@ void DOS_SetupPrograms(void) {
 		"For information about special keys type \033[34;1mintro special\033[0m\n"
 		"For more information about DOSBox, go to \033[34;1mhttp://www.dosbox.com/wiki\033[0m\n"
 		"\n"
-		"\033[31;1mDOSBox will stop/exit without a warning if an error occured!\033[0m\n"
+		"\033[31;1mDOSBox will stop/exit without a warning if an error occurred!\033[0m\n"
 		"\n"
 		"\n"
 		);
@@ -1433,9 +1580,9 @@ void DOS_SetupPrograms(void) {
 		"\033[44;1m\xC9\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD"
 		"\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD"
 		"\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBB\n"
-		"\xBA \033[32mmount c c:\\dosprogs\\\033[37m will create a C drive with c:\\dosprogs as contents.\xBA\n"
+		"\xBA \033[32mmount c c:\\dosgames\\\033[37m will create a C drive with c:\\dosgames as contents.\xBA\n"
 		"\xBA                                                                         \xBA\n"
-		"\xBA \033[32mc:\\dosprogs\\\033[37m is an example. Replace it with your own games directory.  \033[37m \xBA\n"
+		"\xBA \033[32mc:\\dosgames\\\033[37m is an example. Replace it with your own games directory.  \033[37m \xBA\n"
 		"\xC8\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD"
 		"\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD"
 		"\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBC\033[0m\n"
@@ -1444,9 +1591,9 @@ void DOS_SetupPrograms(void) {
 		"\033[44;1m\xC9\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD"
 		"\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD"
 		"\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBB\n"
-		"\xBA \033[32mmount c ~/dosprogs\033[37m will create a C drive with ~/dosprogs as contents.\xBA\n"
+		"\xBA \033[32mmount c ~/dosgames\033[37m will create a C drive with ~/dosgames as contents.\xBA\n"
 		"\xBA                                                                      \xBA\n"
-		"\xBA \033[32m~/dosprogs\033[37m is an example. Replace it with your own games directory.\033[37m  \xBA\n"
+		"\xBA \033[32m~/dosgames\033[37m is an example. Replace it with your own games directory.\033[37m  \xBA\n"
 		"\xC8\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD"
 		"\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD"
 		"\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xCD\xBC\033[0m\n"

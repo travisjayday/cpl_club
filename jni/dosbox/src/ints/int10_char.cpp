@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -155,6 +155,8 @@ static void EGA16_FillRow(Bit8u cleft,Bit8u cright,Bit8u row,PhysPt base,Bit8u a
 	IO_Write(0x3ce,0x8);IO_Write(0x3cf,0xff);
 	IO_Write(0x3ce,0x0);IO_Write(0x3cf,attr);
 	IO_Write(0x3ce,0x1);IO_Write(0x3cf,0xf);
+	/* Enable all Write planes */
+	IO_Write(0x3c4,2);IO_Write(0x3c5,0xf);
 	/* Write some bytes */
 	Bit8u cheight = real_readb(BIOSMEM_SEG,BIOSMEM_CHAR_HEIGHT);
 	PhysPt dest=base+(CurMode->twidth*row)*cheight+cleft;	
@@ -201,9 +203,23 @@ void INT10_ScrollWindow(Bit8u rul,Bit8u cul,Bit8u rlr,Bit8u clr,Bit8s nlines,Bit
 	if(clr>=ncols) clr=(Bit8u)ncols-1;
 	clr++;
 
-	/* Get the correct page */
-	if(page==0xFF) page=real_readb(BIOSMEM_SEG,BIOSMEM_CURRENT_PAGE);
-	PhysPt base=CurMode->pstart+page*real_readw(BIOSMEM_SEG,BIOSMEM_PAGE_SIZE);
+	/* Get the correct page: current start address for current page (0xFF),
+	   otherwise calculate from page number and page size */
+	PhysPt base=CurMode->pstart;
+	if (page==0xff) base+=real_readw(BIOSMEM_SEG,BIOSMEM_CURRENT_START);
+	else base+=page*real_readw(BIOSMEM_SEG,BIOSMEM_PAGE_SIZE);
+	
+	if (GCC_UNLIKELY(machine==MCH_PCJR)) {
+		if (real_readb(BIOSMEM_SEG, BIOSMEM_CURRENT_MODE) >= 9) {
+			// PCJr cannot handle these modes at 0xb800
+			// See INT10_PutPixel M_TANDY16
+			Bitu cpupage =
+				(real_readb(BIOSMEM_SEG, BIOSMEM_CRTCPU_PAGE) >> 3) & 0x7;
+
+			base = cpupage << 14;
+			base += page*real_readw(BIOSMEM_SEG,BIOSMEM_PAGE_SIZE);
+		}
+	}
 
 	/* See how much lines need to be copied */
 	Bit8u start,end;Bits next;

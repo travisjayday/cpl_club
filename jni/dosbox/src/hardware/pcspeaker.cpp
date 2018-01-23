@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2002-2011  The DOSBox Team
+ *  Copyright (C) 2002-2013  The DOSBox Team
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -24,10 +24,22 @@
 #include "setup.h"
 #include "pic.h"
 
+#if HAVE_NEON
+#include "math_neon.h"
+#endif
 
 #ifndef PI
 #define PI 3.14159265358979323846
 #endif
+
+static struct WizardryFixes
+{
+	int mode;
+	float offset;
+	int wiz6_skip_hack;
+	int wiz7_ambient_hack;
+}
+g_wizardry;
 
 #define SPKR_ENTRIES 1024
 #define SPKR_VOLUME 5000
@@ -172,12 +184,56 @@ void PCSPEAKER_SetCounter(Bitu cntr,Bitu mode) {
 	switch (mode) {
 	case 0:		/* Mode 0 one shot, used with realsound */
 		if (spkr.mode!=SPKR_PIT_ON) return;
-		if (cntr>80) { 
-			cntr=80;
+
+		if ( g_wizardry.mode )
+		{
+			if ( g_wizardry.wiz6_skip_hack )
+			{
+				--g_wizardry.wiz6_skip_hack;
+				AddDelayEntry(newindex,spkr.pit_last);
+			}
+			else if ( cntr <= 256 )
+			{
+				if ( g_wizardry.wiz7_ambient_hack )
+				{
+					if ( cntr == 10 || cntr == 11 ) {
+						g_wizardry.offset = -1375.0f; // Ambient Hack.
+					} else {
+						g_wizardry.offset = -(float)SPKR_VOLUME;
+					}
+
+					g_wizardry.wiz7_ambient_hack = 0;
+				}
+
+				if ( cntr > 80 ) {
+					cntr = 80;
+				}
+
+				spkr.pit_last=(((float)cntr)*(SPKR_VOLUME/40.0f))+(g_wizardry.offset);
+
+				AddDelayEntry(newindex,spkr.pit_last);
+				spkr.pit_index=0;
+			}
+			else
+			{ 
+				if ( cntr == 65536 ) {
+					g_wizardry.wiz6_skip_hack = 52; // ignoring Wiz6 gibberish
+				}
+			}
 		}
-		spkr.pit_last=((float)cntr-40)*(SPKR_VOLUME/40.0f);
-		AddDelayEntry(newindex,spkr.pit_last);
-		spkr.pit_index=0;
+		else
+		{
+			// Default DosBox behaviour
+
+			if (cntr>80) { 
+				cntr=80;
+			}
+			
+			spkr.pit_last=((float)cntr-40)*(SPKR_VOLUME/40.0f);
+			AddDelayEntry(newindex,spkr.pit_last);
+			spkr.pit_index=0;
+		}
+
 		break;
 	case 1:
 		if (spkr.mode!=SPKR_PIT_ON) return;
@@ -234,14 +290,42 @@ void PCSPEAKER_SetType(Bitu mode) {
 		AddDelayEntry(newindex,-SPKR_VOLUME);
 		break;
 	case 2:
-		spkr.mode=SPKR_ON;
-		AddDelayEntry(newindex,SPKR_VOLUME);
-		break;
-	case 3:
-		if (spkr.mode!=SPKR_PIT_ON) {
+		if ( g_wizardry.mode )
+		{
+			// Wizardry Fix
+
+			spkr.mode=SPKR_ON;
 			AddDelayEntry(newindex,spkr.pit_last);
 		}
-		spkr.mode=SPKR_PIT_ON;
+		else
+		{
+			// Default DosBox behaviour
+
+			spkr.mode=SPKR_ON;
+			AddDelayEntry(newindex,SPKR_VOLUME);
+		}
+		break;
+	case 3:
+		if ( g_wizardry.mode )
+		{
+			// Wizardry Fix
+
+			spkr.mode=SPKR_PIT_ON;
+			AddDelayEntry(newindex,spkr.pit_last);
+
+			if ( g_wizardry.mode == 7 ) {
+				g_wizardry.wiz7_ambient_hack = 1;
+			}
+		}
+		else
+		{
+			// Default DosBox behaviour
+
+			if (spkr.mode!=SPKR_PIT_ON) {
+				AddDelayEntry(newindex,spkr.pit_last);
+			}
+			spkr.mode=SPKR_PIT_ON;
+		}
 		break;
 	};
 }
@@ -278,7 +362,11 @@ static void PCSPEAKER_CallBack(Bitu len) {
 				index+=vol_len;
 			} else {
 				/* Check how long it will take to goto new level */
-				float vol_time=fabs(vol_diff)/SPKR_SPEED;
+#if HAVE_NEON
+				float vol_time=fabsf_neon(vol_diff)/SPKR_SPEED;
+#else
+				float vol_time=fabsf(vol_diff)/SPKR_SPEED;
+#endif
 				if (vol_time<=vol_len) {
 					/* Volume reaches endpoint in this block, calc until that point */
 					value+=vol_time*spkr.volcur;
@@ -328,6 +416,20 @@ public:
 		spkr.chan=0;
 		Section_prop * section=static_cast<Section_prop *>(configuration);
 		if(!section->Get_bool("pcspeaker")) return;
+
+		int wizpopfix = section->Get_int("wizpopfix");
+		if ( wizpopfix == 6 ) {
+			g_wizardry.mode = 6; // Custom fixes for popping.
+			g_wizardry.offset = 2625.0f-(float)SPKR_VOLUME;
+		} else if ( wizpopfix == 7 ) {
+			g_wizardry.mode = 7; // Custom fixes for popping.
+			g_wizardry.offset = -(float)SPKR_VOLUME;
+		} else {
+			g_wizardry.mode = 0; // Default DOSBOX behaviour
+		}
+		g_wizardry.wiz6_skip_hack = 0;
+		g_wizardry.wiz7_ambient_hack = 0;
+		
 		spkr.mode=SPKR_OFF;
 		spkr.last_ticks=0;
 		spkr.last_index=0;

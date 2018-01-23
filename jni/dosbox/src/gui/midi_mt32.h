@@ -1,3 +1,5 @@
+#ifdef MT32_EMU
+
 #include "../../mt32emu/src/mt32emu.h"
 #include "mixer.h"
 #include "control.h"
@@ -73,18 +75,18 @@ public:
 		MT32Emu::FileStream controlROMFile;
 		MT32Emu::FileStream pcmROMFile;
 
-		if (!controlROMFile.open("CM32L_CONTROL.ROM")) {
+	//	if (!controlROMFile.open("CM32L_CONTROL.ROM")) {
 			if (!controlROMFile.open("MT32_CONTROL.ROM")) {
 				LOG_MSG("MT32: Control ROM file not found");
 				return false;
 			}
-		}
-		if (!pcmROMFile.open("CM32L_PCM.ROM")) {
+	//	}
+	//	if (!pcmROMFile.open("CM32L_PCM.ROM")) {
 			if (!pcmROMFile.open("MT32_PCM.ROM")) {
 				LOG_MSG("MT32: PCM ROM file not found");
 				return false;
 			}
-		}
+	//	}
 		const MT32Emu::ROMImage *controlROMImage = MT32Emu::ROMImage::makeROMImage(&controlROMFile);
 		const MT32Emu::ROMImage *pcmROMImage = MT32Emu::ROMImage::makeROMImage(&pcmROMFile);
 		synth = new MT32Emu::Synth(&reportHandler);
@@ -170,3 +172,4 @@ void MidiHandler_mt32::MT32ReportHandler::printDebug(const char *fmt, va_list li
 void MidiHandler_mt32::mixerCallBack(Bitu len) {
 	midiHandler_mt32.render(len, (Bit16s *)MixTemp);
 }
+#endif

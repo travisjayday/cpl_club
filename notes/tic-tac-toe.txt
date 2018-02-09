@@ -1,0 +1,40 @@
+Step 1: 
+--------------------
+Class: Gamefield
+	- data: character array
+	- void setData(int r, int c, char value) 	// set the value in array at row column to value
+	- int getData(int r, int c) // get the value in array at row column
+
+Class: DriverProgram
+	- main()
+	- instantiate Gamefield
+	- setData(1, 2, 'X')
+	- printData(1, 2)
+----------------------------
+
+Step 2: 
+---------------------------
+Class: Gamefield
+	- method: printField() 		// prints the field to the screen
+
+Class: DriverProgram
+	- call printField() 		// print an empty field
+	- call setData(1, 2, 'X')		// set some data
+	- call printField() 		// print the new field again with the data
+--------------------------
+
+Step 3: 
+--------------------------
+Class: DriverProgram
+	- create Scanner reader = new Scanner(System.in) for getting input
+	- create boolean crossTurn  to keep track of turns
+	- create a while loop that loops forever. Inside it
+		- printField() 
+		- prompt cross or circle for input based on crossTurn
+		- setData() of field based on input
+		- switch turns
+---------------------------
+
+	
+
+

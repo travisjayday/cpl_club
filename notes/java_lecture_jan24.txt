@@ -1,0 +1,11 @@
+1. What is an Object in Java
+2. Go over dog example 
+	- Create a Dog Class that takes a string name in constructor
+	- has methods bark(), sleep(), setAge(), getAge()
+	
+3. go over declaration, instantiation, and initialization of dog
+4. go over array list
+5. create an array list of dogs (add them to the list) 
+6. loop through the list and print the name of each dog
+7. use for loop 
+ 

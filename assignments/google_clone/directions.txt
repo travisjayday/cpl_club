@@ -1,0 +1,28 @@
+The goal of this assignment is to create a webpage that visually looks like the Google search engine from 1998. 
+
+Directions: 
+	- Create an html file
+	- Write a webpage that looks like old_google.jpeg 
+
+Resources: 
+	- For the google logo, the image is found at: 
+		https://heavyeditorial.files.wordpress.com/2015/01/1998-copy.jpg 
+	- The "About Google" link refers to: 
+	 	https://www.google.com/about/	
+	- Note: clicking the buttons does not do anything yet
+
+Hints: 
+	- You must use the following html tags: 
+		- <div>
+		- <img>
+		- <button>
+		- <input type='text'...
+		- <a href.../>
+		- <p>
+		- <i>, <u>
+		
+If you've finished: 
+	- Create a script that when the button is clicked, the browser will navigate to http://google.com/search?q=XXXXX where XXXXX is whatever the user inputted in your html textfield
+	- Use the button onClick attribute to link your script with your button
+	- Use window.location.href = '...' in javascript to go to a url
+

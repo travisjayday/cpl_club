@@ -1,0 +1,26 @@
+1. What are websites made of? 
+	- html files
+
+2. What does a browser do? 
+	- renders an html file into graphical form 
+
+3. Where do they get html files from?  
+	- from webservers who host html files
+
+4. What is html? 
+	- hypertext markup language: markup language to make text pretty 
+	- generates high level graphics from text
+
+5. How do you make html files? 
+	- use your favorite text editor!
+	- examples: linux: vim, windows: Notepad++, mac: sublime text
+	- give it the .html extension, and double click it (or navigate your browser to it)
+
+6. How do html files look like? 
+
+7. How can I make my own webpage? 
+
+
+
+For homework, try to recreate the old google search engine. 
+

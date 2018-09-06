@@ -1,0 +1,40 @@
+<html>
+	<head>
+		<script>
+			function myFunc() {
+				alert('this is my function')
+			}
+			
+			function evalTxt() {
+				txt = document.getElementById('mytxt') 
+				alert('You typed: ' + txt.value) 
+			}
+
+			function gotoURL() {
+				myurl = document.getElementById('mytxt').value
+				alert('Going to url: ' + myurl) 
+				window.location.assign(myurl)
+			}
+		</script>
+	</head>
+
+	<body>
+		<!-- inline javascript --> 
+		<button onClick='alert("hello world from inline js")'>Click me</button>
+
+		<!-- calling function in <script> tag --> 
+		<button onClick='myFunc()'>call my function</button>
+
+		<!-- 2 linebreaks and a horionzontal line --> 
+		<br><br><hr>
+
+		<!-- user input text field -->
+		<input id='mytxt' type='text'/>
+
+		<!-- call evalTxt when clicked -->
+		<button onClick='evalTxt()'>Submit Text</button>
+
+		<!-- goto url specified in mytxt input -->
+		<button onClick='gotoURL()'>GOTO URL</button>
+	</body>
+</html>

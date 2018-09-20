@@ -1,0 +1,79 @@
+<html>
+	<head>
+		<script>
+			var ctx = null 
+			var canvas = null
+			var playerX = 0 
+			var playerY = 0
+			var playerR = 20
+
+			function init()	{
+				canvas = document.getElementById('myCanvas');
+				ctx = canvas.getContext('2d');
+
+				playerX = canvas.width / 2;
+				playerY = canvas.height - 40;
+
+				setInterval(gameLoop, 60);
+			}
+
+			function gameLoop() {
+				ctx.fillStyle = 'black'
+				ctx.fillRect(0, 0, canvas.width, canvas.height) 
+
+				ctx.beginPath();
+				ctx.arc(playerX, playerY, playerR, 0, 2 * Math.PI, false); 	
+				ctx.fillStyle = 'white';
+				ctx.fill()
+			}
+
+			function goLeft() {
+				playerX -= 20;
+			}
+
+			function goRight() {
+				playerX += 20;
+			}
+
+			function goUp() {
+				playerY -= 20;
+			}
+
+			function goDown() {
+				playerY += 20;
+			}
+
+		</script>
+
+		<style>
+			body {
+				margin: 0px;
+			}
+
+			#cont {
+				text-align: center;
+				background-color: rgb(240, 240, 240); 
+			}
+
+			button {
+				border-radius: 10px;
+				width: 80px; 
+				padding-left: 10px; 
+				padding-right: 10px;
+				padding-top: 5px; 
+				padding-bottom: 5px; 
+			}
+		</style>
+	</head>
+
+	<body onload='init()'>
+		<div id='cont'>
+			<canvas id='myCanvas' width='480px', height='320px'></canvas>
+			<br>
+			<button onClick='goLeft()'>LEFT</button>
+			<button onClick='goRight()'>RIGHT</button>
+			<button onClick='goUp()'>UP</button>
+			<button onClick='goDown()'>DOWN</button>
+		</div>
+	</body>
+</html>

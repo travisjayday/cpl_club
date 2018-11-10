@@ -2,12 +2,17 @@
 	<head>
 		<script>
 			function init() {
-				canvas = document.getElementById('mycanvas')
-				canvas.width = 480 
-				canvas.height = 320 
-				ctx = canvas.getContext('2d')
-				ctx.fillStyle = 'blue'
-				ctx.fillRect(0, 0, canvas.width-1, canvas.height-1)
+				canvas = document.getElementById('mycanvas');
+				canvas.width = 480;
+				canvas.height = 320;
+				ctx = canvas.getContext('2d');
+				ctx.fillStyle = 'blue';
+				ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+				ctx.fillStyle = 'orange';
+				ctx.beginPath();
+				ctx.arc(50, 50, 50, 2 * Math.PI, 0) 
+				ctx.stroke()
 			}
 		</script>
 	</head>

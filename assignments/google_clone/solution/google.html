@@ -1,0 +1,74 @@
+<html>
+	<head>
+		<title>Google 1998</title>
+
+		<script> 
+			function search() {
+				textfield = document.getElementById('txt_field')
+				txt = textfield.value
+				url = 'http://google.com/search?q=' + txt
+				window.location.href = url
+			}
+		</script>
+
+		<style> 
+			p { 
+				margin: 0px;
+				font-family: serif;
+				font-size: 14px; 
+			}
+			a {
+				font-family: serif;
+				font-size: 14px; 
+			}
+			.hbox {
+				width: 100%; 
+				text-align: center; 
+				padding: 10px; 
+			}
+			.gray {
+				background-color: #eeeeee; 
+			}
+		</style>
+	</head>
+	<body>
+		<div class='hbox'>
+			<img src='https://heavyeditorial.files.wordpress.com/2015/01/1998-copy.jpg'
+			 	 style='width: auto; height: 100px;'/>
+		</div>
+
+		<div class='hbox gray'>
+			<p>Search the web using Google!</p>
+			<input id='txt_field' type='text' style='width: 300px'>
+			<br>
+			<select>
+				<option>10 Results</option>
+				<option>25 Results</option>
+				<option>50 Results</option>
+			</select>
+			<button onClick='search()'>Google Search</button>
+			<button>I'm feeling lucky</button> 
+			<p><i>Index contains ~25 million pages (soon to be much bigger</i></p>
+		</div>
+
+		<div class='hbox' style='padding-top: 0px'>
+			<a style='display: inline-block; 
+					  font-size: 26px; margin-bottom: 20px' 
+			   href='http://google.com/about'><b>About Google!</b></a>
+		   	<br>
+		  	<a href='https://who.stanford.edu'>Stanford Search</a>
+			<a href='https://elixir.bootlin.com/linux/latest/source'>Linux Search</a>
+		</div>
+
+		<div class='hbox gray'>
+			<p>Get Google updates monthly!</p>
+			<input type='text' placeholder='your email'/>
+			<button>Subscribe</button>
+			<a href='dejadfj'>Archive</a>
+		</div>
+			
+		<div class='hbox' style='padding-top: 0px'>
+			<p style='font-size: 11px'>Copyright &copy 1997-8 CPL Club</p>
+		</div>
+	</body>
+</html>

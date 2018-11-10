@@ -1,0 +1,49 @@
+Objective: 
+	- Make a Pong Game
+
+Directions: 
+	- Use HTML Canvas and JavaScript to make a Pong Game (60 Marks) 
+
+Hints: 
+		------------------------------- Step 1 (Controls) ----------------------------------
+		- Initialize the Canvas
+		- Use setInterval() to call a drawing function over and over
+		- In the drawing function, draw two rectangles, one for each player peddle
+		- Create a variable to control the position of the player peddle (don't worry about the enemy peddle yet)
+		- Create functions that changes the variable (e.g. goUp(), goDown())
+		- Create two buttons that make the peddle go up or down
+
+		------------------------------- Step 2 (Physics) ----------------------------------
+		- Create a ball at the middle of the screen with two variables for its position
+		- Create variables for its x and y velocity. At the end of each drawcall, update the ball positions by adding the velocities to them. 
+		- Give it an initial x velocity (later you may generate random intial velocities)  
+			e.g. ballPosX = ballPosX + ballVelX
+		- Use if statements to determine when the ball hits the side of the canvas and flip the x velocity:
+			if (ballX < 0) {
+				ballVelX = -ballVelX 
+			}
+		- If the ball hits the top or bottom, flip the y-velocity
+		- At this point, you must implement peddle collision detection. 
+		- You must check if, when the ball is hitting the left side, the y-value of the ball is greater than the y-value of the peddle
+			and less than the y-value of the peddle + the height of the peddle. If that is true, the ball collided, so flip the x-velocity. 
+			If not, restart the game by setting the position of the ball to the center of the screen (you may add a score system later)
+		
+		------------------------------- Step 3 (Enemy AI) ----------------------------------
+		- To make the AI, make a variable for the y-position of the enemy peddle. 
+		- If the ball y position is greater than the enemy peddle position, add to the enemey peddle position
+		- Else, if the ball y position is less than the enemy position (if ball is above peddle), subtract from the enemy peddle position
+		- Now you've created super intelligent artificial intelligence system!!
+
+		------------------------------- Step 4 (Extra Things) ----------------------------------
+		- Things to possibly entertain: 
+			- Can we display the score on the canvas? 
+			- Can we generate intitial random velocities for the ball? 
+			- Can we use jQuery to get input from the keyboard instead of buttons? 
+			- Can we play collision sounds when the ball hits something? 
+			- Can we make the AI more intelligent? 
+
+Remarks: 	
+	- Once we've finished the game, we'll host it on the web so that we can play it anywhere. 
+	- If you have questions or are lost please text Travis (956) 867-8756 or send an email to travis.ziegler.rho@iblamar.org 
+	- Possibly create some original simple games using this method. 
+	- Have fun!

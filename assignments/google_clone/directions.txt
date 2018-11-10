@@ -1,5 +1,5 @@
 The goal of this assignment is to create a webpage that visually looks like the
-Google search engine from 1998. 
+Google search engine from 1998. Reference image here: http://blogoscoped.com/files/google-com-history/thumb/1997.jpg
 
 Step 1: Desiging the webpage 
 --------------------------------
